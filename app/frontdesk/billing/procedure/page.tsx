@@ -67,9 +67,40 @@ export default function ProcedureBillingPage() {
     if (!selectedPatient) return;
     fetch(`/api/visits?patientId=${selectedPatient._id}`)
       .then((res) => res.json())
-      .then((data) => setVisits(Array.isArray(data) ? data : data.visits ?? []))
+      .then((data) => {
+        const v = Array.isArray(data) ? data : data.visits ?? [];
+        setVisits(v);
+        // Automatically select the most recent visit so prescriptions load seamlessly
+        if (v.length > 0) {
+          setSelectedVisitId(v[0]._id);
+        } else {
+          setSelectedVisitId("none");
+        }
+      })
       .catch(() => setVisits([]));
   }, [selectedPatient]);
+
+  useEffect(() => {
+    if (!selectedPatient || !selectedVisitId || selectedVisitId === "none") return;
+    fetch(`/api/prescriptions?patientId=${selectedPatient._id}&visitId=${selectedVisitId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.procedures && Array.isArray(data.procedures)) {
+          const prescribedItems = data.procedures.map((p: any) => ({
+            procedureId: p._id,
+            procedureName: p.name,
+            quantity: 1,
+            unitPrice: p.price,
+            totalPrice: p.price,
+          }));
+          setItems(prescribedItems);
+          if (prescribedItems.length > 0) {
+            toast.success("Auto-loaded prescribed procedures");
+          }
+        }
+      })
+      .catch(console.error);
+  }, [selectedPatient, selectedVisitId]);
 
   const addItem = () => {
     const proc = procedures.find((p) => p._id === newProcId);
@@ -102,7 +133,7 @@ export default function ProcedureBillingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           patientId: selectedPatient._id,
-          visitId: selectedVisitId || undefined,
+          visitId: selectedVisitId === "none" ? undefined : (selectedVisitId || undefined),
           items: items.map((i) => ({ procedureId: i.procedureId, quantity: i.quantity })),
         }),
       });
@@ -190,7 +221,7 @@ export default function ProcedureBillingPage() {
             <Select value={selectedVisitId} onValueChange={setSelectedVisitId}>
               <SelectTrigger className="w-48"><SelectValue placeholder="Select visit" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
+                <SelectItem value="none">None</SelectItem>
                 {visits.map((v) => (
                   <SelectItem key={v._id} value={v._id}>
                     {format(new Date(v.visitDate), "dd MMM yyyy")} — {v.receiptNo}

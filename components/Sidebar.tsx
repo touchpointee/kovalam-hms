@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
   UserPlus,
@@ -58,28 +57,46 @@ export function Sidebar({ role }: { role: Role }) {
   const links = linksByRole[role] ?? [];
 
   return (
-    <aside className="flex h-full w-56 flex-col border-r bg-muted/30">
-      <div className="border-b p-4">
-        <p className="font-semibold text-foreground">{hospitalName}</p>
+    <aside
+      className="flex h-full w-56 flex-col"
+      style={{ backgroundColor: "#e8edf5" }}
+    >
+      {/* Hospital Name */}
+      <div className="px-5 py-5">
+        <p className="text-base font-bold text-slate-800">{hospitalName}</p>
       </div>
-      <nav className="flex-1 space-y-1 p-2">
-        {links.map(({ href, label, icon }) => (
-          <Link key={href} href={href}>
-            <Button
-              variant={pathname === href ? "secondary" : "ghost"}
-              className={cn("w-full justify-start", pathname === href && "bg-muted")}
-            >
-              {icon}
-              {label}
-            </Button>
-          </Link>
-        ))}
+
+      {/* Nav Links */}
+      <nav className="flex-1 space-y-0.5 px-3">
+        {links.map(({ href, label, icon }) => {
+          const isActive = pathname === href || pathname.startsWith(href + "/");
+          return (
+            <Link key={href} href={href}>
+              <span
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm transition-colors duration-150",
+                  isActive
+                    ? "font-semibold text-white bg-[#3d3566]"
+                    : "font-normal hover:bg-white/60 hover:text-slate-700"
+                )}
+              >
+                {icon}
+                {label}
+              </span>
+            </Link>
+          );
+        })}
       </nav>
-      <div className="border-t p-2">
-        <Button variant="ghost" className="w-full justify-start" onClick={() => signOut({ callbackUrl: "/login" })}>
+
+      {/* Logout */}
+      <div className="px-3 py-4">
+        <button
+          onClick={() => signOut({ callbackUrl: "/login" })}
+          className="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-normal transition-colors hover:bg-[#3d3566] hover:text-white"
+        >
           <LogOut className="h-4 w-4" />
           Logout
-        </Button>
+        </button>
       </div>
     </aside>
   );

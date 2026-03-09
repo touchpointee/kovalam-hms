@@ -2,14 +2,17 @@
 const path = require("path");
 const fs = require("fs");
 
-// Load .env.local so MONGODB_URI is set (ts-node doesn't load it automatically)
-const envPath = path.resolve(process.cwd(), ".env.local");
-if (fs.existsSync(envPath)) {
-  const content = fs.readFileSync(envPath, "utf8");
-  content.split("\n").forEach((line: string) => {
-    const m = line.match(/^([^#=]+)=(.*)$/);
-    if (m) process.env[m[1].trim()] = m[2].trim();
-  });
+// Load .env.local then .env so MONGODB_URI is set (ts-node doesn't load it automatically)
+for (const envFile of [".env.local", ".env"]) {
+  const envPath = path.resolve(process.cwd(), envFile);
+  if (fs.existsSync(envPath)) {
+    const content = fs.readFileSync(envPath, "utf8");
+    content.split("\n").forEach((line: string) => {
+      const m = line.match(/^([^#=]+)=(.*)$/);
+      if (m && !process.env[m[1].trim()]) process.env[m[1].trim()] = m[2].trim();
+    });
+    break;
+  }
 }
 
 const mongoose = require("mongoose");

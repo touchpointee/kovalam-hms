@@ -47,7 +47,7 @@ export default function AdminExpensesPage() {
   const [total, setTotal] = useState(0);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState("all");
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
@@ -59,7 +59,7 @@ export default function AdminExpensesPage() {
     const params = new URLSearchParams();
     if (from) params.set("from", from);
     if (to) params.set("to", to);
-    if (category) params.set("category", category);
+    if (category && category !== "all") params.set("category", category);
     setLoading(true);
     fetch(`/api/expenses?${params}`)
       .then((res) => res.json())
@@ -139,7 +139,7 @@ export default function AdminExpensesPage() {
           <Select value={category} onValueChange={setCategory}>
             <SelectTrigger className="w-40"><SelectValue placeholder="All" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All</SelectItem>
+              <SelectItem value="all">All</SelectItem>
               {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
