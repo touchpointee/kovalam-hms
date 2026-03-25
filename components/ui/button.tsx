@@ -14,10 +14,10 @@ const buttonVariants = cva(
         destructive:
           "text-red-600 nm-raised nm-btn-active hover:bg-[#3d3566] hover:text-white transition-all",
         outline:
-          "nm-pressed text-slate-800 hover:bg-[#3d3566] hover:text-white transition-all",
+          "nm-raised text-slate-800 hover:bg-[#3d3566] hover:text-white transition-all",
         secondary:
           "nm-raised text-slate-600 nm-btn-active hover:bg-[#3d3566] hover:text-white transition-all",
-        ghost: "hover:nm-raised hover:text-white hover:bg-[#3d3566] transition-all",
+        ghost: "nm-raised text-slate-800 hover:text-white hover:bg-[#3d3566] transition-all",
         link: "text-[#3d3566] underline-offset-4 hover:underline",
       },
       size: {

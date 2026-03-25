@@ -92,26 +92,7 @@ export default function FrontdeskDashboardPage() {
           </CardContent>
         </Card>
       </div>
-      <div className="flex flex-wrap gap-2">
-        <Button asChild>
-          <Link href="/frontdesk/register">
-            <UserPlus className="mr-2 h-4 w-4" />
-            Register New Patient
-          </Link>
-        </Button>
-        <Button asChild variant="outline">
-          <Link href="/frontdesk/visit">
-            <ClipboardList className="mr-2 h-4 w-4" />
-            New OP Visit
-          </Link>
-        </Button>
-        <Button asChild variant="outline">
-          <Link href="/frontdesk/billing/procedure">
-            <CreditCard className="mr-2 h-4 w-4" />
-            Procedure Billing
-          </Link>
-        </Button>
-      </div>
+
       <Card>
         <CardHeader>
           <CardTitle>Today&apos;s Visits</CardTitle>
