@@ -23,7 +23,7 @@ export function Header({
   role: Role;
 }) {
   return (
-    <header className="flex h-14 items-center justify-between border-b bg-background px-4">
+    <header className="flex h-14 items-center justify-between nm-flat px-4" style={{ borderRadius: 0 }}>
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium">{name}</span>
         <Badge className={cn("text-xs", roleBadgeClass[role] ?? "bg-muted")}>

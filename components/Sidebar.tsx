@@ -58,15 +58,15 @@ export function Sidebar({ role }: { role: Role }) {
 
   return (
     <aside
-      className="flex h-full w-56 flex-col"
-      style={{ backgroundColor: "#e8edf5" }}
+      className="flex h-full w-56 flex-col nm-flat z-10"
+      style={{ borderRadius: 0, backgroundColor: "var(--nm-bg)" }}
     >
       {/* Hospital Name */}
       <div className="px-5 py-5">
         <p className="text-base font-bold text-slate-800">{hospitalName}</p>
       </div>
 
-      {/* Nav Links */}
+      {/* Nav Links — original style */}
       <nav className="flex-1 space-y-0.5 px-3">
         {links.map(({ href, label, icon }) => {
           const isActive = pathname === href || pathname.startsWith(href + "/");
@@ -88,11 +88,11 @@ export function Sidebar({ role }: { role: Role }) {
         })}
       </nav>
 
-      {/* Logout */}
+      {/* Logout — neumorphic */}
       <div className="px-3 py-4">
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}
-          className="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-normal transition-colors hover:bg-[#3d3566] hover:text-white"
+          className="nm-raised nm-btn-active flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-normal text-slate-600 transition-all duration-200 hover:text-[#3d3566]"
         >
           <LogOut className="h-4 w-4" />
           Logout

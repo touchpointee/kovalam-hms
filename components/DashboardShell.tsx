@@ -22,11 +22,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     return null;
   }
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden" style={{ background: "var(--nm-bg)" }}>
       <Sidebar role={role} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header name={name} role={role} />
-        <main className="flex-1 overflow-auto p-4">{children}</main>
+        <main className="flex-1 overflow-auto p-4" style={{ background: "var(--nm-bg)" }}>{children}</main>
       </div>
     </div>
   );
