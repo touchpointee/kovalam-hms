@@ -7,6 +7,8 @@ const medicineSchema = new mongoose.Schema(
     category: { type: String },
     manufacturer: { type: String },
     unit: { type: String },
+    minQuantity: { type: Number, default: 10 },
+    maxQuantity: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
     createdAt: { type: Date, default: Date.now },
   },

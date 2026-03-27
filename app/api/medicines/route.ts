@@ -37,6 +37,8 @@ const postSchema = z.object({
   category: z.string().optional(),
   manufacturer: z.string().optional(),
   unit: z.string().optional(),
+  minQuantity: z.number().int().min(0).optional(),
+  maxQuantity: z.number().int().min(0).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -48,11 +50,21 @@ export async function POST(req: NextRequest) {
     if (forbidden) return forbidden;
 
     const body = await req.json();
-    const parsed = postSchema.safeParse(body);
+    const parsed = postSchema.safeParse({
+      ...body,
+      minQuantity: body.minQuantity === "" || body.minQuantity === undefined ? undefined : parseInt(String(body.minQuantity), 10),
+      maxQuantity: body.maxQuantity === "" || body.maxQuantity === undefined ? undefined : parseInt(String(body.maxQuantity), 10),
+    });
     if (!parsed.success) {
       return NextResponse.json({ message: "Validation failed" }, { status: 400 });
     }
-    const medicine = await Medicine.create(parsed.data);
+    const medicine = await Medicine.create({
+      ...parsed.data,
+      category: parsed.data.category || "",
+      unit: parsed.data.unit || "unit",
+      minQuantity: parsed.data.minQuantity ?? 10,
+      maxQuantity: parsed.data.maxQuantity ?? 0,
+    });
     return NextResponse.json(medicine.toJSON());
   } catch (e) {
     console.error(e);

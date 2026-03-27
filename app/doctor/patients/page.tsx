@@ -104,7 +104,7 @@ export default function DoctorPatientsPage() {
                 <TableRow
                   key={p._id}
                   className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => router.push(`/doctor/patients/${p._id}/consultation`)}
+                  onClick={() => router.push(`/doctor/patients/${p._id}`)}
                 >
                   <TableCell>{p.regNo}</TableCell>
                   <TableCell>{p.name}</TableCell>

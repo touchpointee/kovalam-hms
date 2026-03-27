@@ -11,6 +11,8 @@ const putSchema = z.object({
   category: z.string().optional(),
   manufacturer: z.string().optional(),
   unit: z.string().optional(),
+  minQuantity: z.number().int().min(0).optional(),
+  maxQuantity: z.number().int().min(0).optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -30,7 +32,11 @@ export async function PUT(
       return NextResponse.json({ message: "Invalid ID" }, { status: 400 });
     }
     const body = await req.json();
-    const parsed = putSchema.safeParse(body);
+    const parsed = putSchema.safeParse({
+      ...body,
+      minQuantity: body.minQuantity === "" || body.minQuantity === undefined ? undefined : parseInt(String(body.minQuantity), 10),
+      maxQuantity: body.maxQuantity === "" || body.maxQuantity === undefined ? undefined : parseInt(String(body.maxQuantity), 10),
+    });
     if (!parsed.success) {
       return NextResponse.json({ message: "Validation failed" }, { status: 400 });
     }

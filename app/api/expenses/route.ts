@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     await dbConnect();
     const { session, error } = await requireAuth();
     if (error) return error;
-    const forbidden = requireRole(session!, ["admin"]);
+    const forbidden = requireRole(session!, ["admin", "frontdesk"]);
     if (forbidden) return forbidden;
 
     const body = await req.json();

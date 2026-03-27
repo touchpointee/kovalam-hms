@@ -5,6 +5,7 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -44,7 +45,10 @@ export default function AdminDashboardPage() {
       }),
       fetch("/api/patients?limit=10").then((r) => r.json()).then((d) => setRecentPatients(d.patients ?? [])),
       fetch("/api/expenses?from=2020-01-01&to=2030-12-31").then((r) => r.json()).then((d) => setRecentExpenses((d.expenses ?? []).slice(0, 5))),
-      fetch("/api/stock/low").then((r) => r.json()).then(setLowStock).catch(() => setLowStock([])),
+      fetch("/api/stock/low", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((data) => setLowStock(Array.isArray(data) ? data : []))
+        .catch(() => setLowStock([])),
     ]).finally(() => setLoading(false));
   }, []);
 
@@ -53,10 +57,13 @@ export default function AdminDashboardPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold">Admin Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Loading today’s operational summary…</p>
+        </div>
         <div className="grid gap-4 md:grid-cols-5">
           {[1, 2, 3, 4, 5].map((i) => (
-            <Skeleton key={i} className="h-24" />
+            <Skeleton key={i} className="h-28 rounded-xl" />
           ))}
         </div>
       </div>
@@ -65,81 +72,99 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Admin Dashboard</h1>
-      <div className="grid gap-4 md:grid-cols-5">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">OP Revenue (Today)</CardTitle>
-            <Receipt className="h-4 w-4 text-muted-foreground" />
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Admin Dashboard</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Clinical and finance overview for {format(new Date(), "dd MMM yyyy")}
+          </p>
+        </div>
+        <Badge variant="secondary" className="rounded-md px-2.5 py-1 text-xs">
+          Live Summary
+        </Badge>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <Card className="border shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between pb-1">
+            <CardTitle className="text-sm font-medium text-muted-foreground">OP Revenue (Today)</CardTitle>
+            <Receipt className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(opTotal)}</p>
-            <p className="text-muted-foreground text-xs">{opCount} visits</p>
+            <p className="text-2xl font-semibold">{formatCurrency(opTotal)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{opCount} paid visits</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Procedure (Today)</CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
+        <Card className="border shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between pb-1">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Procedure (Today)</CardTitle>
+            <CreditCard className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(procedureTotal)}</p>
+            <p className="text-2xl font-semibold">{formatCurrency(procedureTotal)}</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Medicine (Today)</CardTitle>
-            <Pill className="h-4 w-4 text-muted-foreground" />
+        <Card className="border shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between pb-1">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Medicine (Today)</CardTitle>
+            <Pill className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(medicineTotal)}</p>
+            <p className="text-2xl font-semibold">{formatCurrency(medicineTotal)}</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Expenses (Today)</CardTitle>
-            <TrendingDown className="h-4 w-4 text-muted-foreground" />
+        <Card className="border shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between pb-1">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Expenses (Today)</CardTitle>
+            <TrendingDown className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(expenseTotal)}</p>
+            <p className="text-2xl font-semibold">{formatCurrency(expenseTotal)}</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Net Revenue</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+        <Card className="border shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between pb-1">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Net Revenue</CardTitle>
+            <TrendingUp className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <p className={`text-2xl font-bold ${netRevenue >= 0 ? "text-green-600" : "text-red-600"}`}>
+            <p className={`text-2xl font-semibold ${netRevenue >= 0 ? "text-emerald-600" : "text-red-600"}`}>
               {formatCurrency(netRevenue)}
             </p>
           </CardContent>
         </Card>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card className="border shadow-sm">
           <CardHeader>
             <CardTitle>Low Stock / Expiring (Top 5)</CardTitle>
-            <CardDescription className="sr-only">Alerts</CardDescription>
+            <CardDescription>Prioritize replenishment to avoid stock-out.</CardDescription>
           </CardHeader>
           <CardContent>
             {lowStock.length === 0 ? (
               <p className="text-muted-foreground text-sm">No alerts.</p>
             ) : (
-              <ul className="space-y-1 text-sm">
+              <ul className="space-y-2 text-sm">
                 {(lowStock as Array<{ medicine?: { name: string }; batchNo: string; currentStock: number }>).slice(0, 5).map((b, i) => (
-                  <li key={i}>{b.medicine?.name ?? "-"} — {b.batchNo} (Stock: {b.currentStock})</li>
+                  <li key={i} className="flex items-center justify-between rounded-md border px-3 py-2">
+                    <span>{b.medicine?.name ?? "-"}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {b.batchNo} · Stock: {b.currentStock}
+                    </span>
+                  </li>
                 ))}
               </ul>
             )}
             <Button asChild variant="outline" size="sm" className="mt-2">
-              <Link href="/pharmacy/stock">View Stock</Link>
+              <Link href="/admin/pharmacy/stock">View Stock</Link>
             </Button>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border shadow-sm">
           <CardHeader>
             <CardTitle>Recent Patients</CardTitle>
+            <CardDescription>Most recent registrations.</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -154,7 +179,7 @@ export default function AdminDashboardPage() {
                 {recentPatients.slice(0, 5).map((p) => (
                   <TableRow key={p._id}>
                     <TableCell>{p.regNo}</TableCell>
-                    <TableCell>{p.name}</TableCell>
+                    <TableCell className="font-medium">{p.name}</TableCell>
                     <TableCell>{format(new Date(p.createdAt), "dd MMM yyyy")}</TableCell>
                   </TableRow>
                 ))}
@@ -163,9 +188,11 @@ export default function AdminDashboardPage() {
           </CardContent>
         </Card>
       </div>
-      <Card>
+
+      <Card className="border shadow-sm">
         <CardHeader>
           <CardTitle>Recent Expenses</CardTitle>
+          <CardDescription>Latest approved operating expenses.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -173,7 +200,7 @@ export default function AdminDashboardPage() {
               <TableRow>
                 <TableHead>Date</TableHead>
                 <TableHead>Description</TableHead>
-                <TableHead>Amount</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -181,7 +208,7 @@ export default function AdminDashboardPage() {
                 <TableRow key={e._id}>
                   <TableCell>{format(new Date(e.date), "dd MMM yyyy")}</TableCell>
                   <TableCell>{e.description}</TableCell>
-                  <TableCell>{formatCurrency(e.amount)}</TableCell>
+                  <TableCell className="text-right font-medium">{formatCurrency(e.amount)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

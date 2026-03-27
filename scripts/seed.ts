@@ -2,26 +2,35 @@
 const path = require("path");
 const fs = require("fs");
 
-// Load .env.local then .env so MONGODB_URI is set (ts-node doesn't load it automatically)
-for (const envFile of [".env.local", ".env"]) {
-  const envPath = path.resolve(process.cwd(), envFile);
-  if (fs.existsSync(envPath)) {
-    const content = fs.readFileSync(envPath, "utf8");
-    content.split("\n").forEach((line: string) => {
-      const m = line.match(/^([^#=]+)=(.*)$/);
-      if (m && !process.env[m[1].trim()]) process.env[m[1].trim()] = m[2].trim();
-    });
-    break;
+function readEnvFileContent(filePath: string) {
+  const rawBuffer = fs.readFileSync(filePath);
+  return rawBuffer.includes(0) ? rawBuffer.toString("utf16le") : rawBuffer.toString("utf8");
+}
+
+function resolveMongoUri() {
+  for (const envFile of [".env.local", ".env"]) {
+    const envPath = path.resolve(process.cwd(), envFile);
+    if (!fs.existsSync(envPath)) continue;
+    const content = readEnvFileContent(envPath);
+    for (const line of content.split(/\r?\n/)) {
+      const m = line.match(/^(?:export\s+)?MONGODB_URI\s*=\s*(.+)$/);
+      if (!m) continue;
+      return m[1].trim().replace(/^["']|["']$/g, "");
+    }
   }
+  return process.env.MONGODB_URI;
 }
 
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/hms";
+const MONGODB_URI = resolveMongoUri();
+if (!MONGODB_URI) {
+  throw new Error("MONGODB_URI not loaded from .env.local or .env");
+}
 
 async function seed() {
-  await mongoose.connect(MONGODB_URI);
+  await mongoose.connect(MONGODB_URI, { dbName: "hms" });
 
   const User = mongoose.connection.collection("users");
   const Patient = mongoose.connection.collection("patients");

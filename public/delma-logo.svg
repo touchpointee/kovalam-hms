@@ -1,0 +1,16 @@
+<svg width="220" height="120" viewBox="0 0 220 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <ellipse cx="110" cy="60" rx="102" ry="44" fill="#263F86"/>
+  <text
+    x="110"
+    y="70"
+    text-anchor="middle"
+    fill="white"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="34"
+    font-style="italic"
+    font-weight="700"
+    letter-spacing="-1"
+  >
+    DELMA
+  </text>
+</svg>

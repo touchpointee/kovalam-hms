@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
 import { formatCurrency } from "@/lib/utils";
@@ -55,7 +55,7 @@ export default function AdminExpensesPage() {
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Expense | null>(null);
 
-  const load = () => {
+  const load = useCallback(() => {
     const params = new URLSearchParams();
     if (from) params.set("from", from);
     if (to) params.set("to", to);
@@ -69,11 +69,11 @@ export default function AdminExpensesPage() {
       })
       .catch(() => { setExpenses([]); setTotal(0); })
       .finally(() => setLoading(false));
-  };
+  }, [from, to, category]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   const openAdd = () => {
     setEditing(null);

@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
+import { ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,6 +51,7 @@ export default function LoginPage() {
   const testCredentials = [
     { label: "Admin", email: "admin@hms.com", password: "password123" },
     { label: "Doctor", email: "doctor@hms.com", password: "password123" },
+  { label: "Pharmacist", email: "pharmacy@hms.com", password: "password123" },
     { label: "Front Desk", email: "frontdesk@hms.com", password: "password123" },
   ] as const;
 
@@ -116,60 +119,75 @@ export default function LoginPage() {
   }
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader className="text-center">
-        <CardTitle className="text-xl">{hospitalName}</CardTitle>
-        <CardDescription>Sign in to continue</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              {...register("email")}
-              className={errors.email ? "border-destructive" : ""}
+    <div className="w-full max-w-md">
+      <div className="mb-4 rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm text-blue-700 shadow-sm">
+        <div className="flex items-center gap-2 text-blue-900">
+          <ShieldCheck className="h-4 w-4 text-red-600" />
+          <span className="font-medium">Secure clinical access</span>
+        </div>
+        <p className="mt-1 text-xs">Authorized staff only. All activity is audited.</p>
+      </div>
+
+      <Card className="border-blue-100 shadow-md">
+        <CardHeader className="space-y-1 text-center">
+          <div className="mx-auto mb-2">
+            <Image
+              src="/hospital-logo.png"
+              alt={hospitalName}
+              width={72}
+              height={72}
+              className="rounded-full border border-blue-200 object-cover"
             />
-            {errors.email && (
-              <p className="text-destructive text-sm">{errors.email.message}</p>
-            )}
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              {...register("password")}
-              className={errors.password ? "border-destructive" : ""}
-            />
-            {errors.password && (
-              <p className="text-destructive text-sm">{errors.password.message}</p>
-            )}
-          </div>
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Signing in..." : "Sign in"}
-          </Button>
-          <div className="space-y-2 pt-2">
-            <p className="text-muted-foreground text-center text-xs">Quick test login</p>
-            <div className="flex flex-wrap gap-2 justify-center">
-              {testCredentials.map(({ label, email, password }) => (
-                <Button
-                  key={email}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={loading}
-                  onClick={() => fillAndSubmit(email, password)}
-                >
-                  {label}
-                </Button>
-              ))}
+          <CardTitle className="text-2xl tracking-tight text-blue-900">{hospitalName}</CardTitle>
+          <CardDescription className="text-blue-700">Sign in to continue to your dashboard</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Work email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="name@hospital.com"
+                {...register("email")}
+                className={errors.email ? "border-destructive focus-visible:ring-destructive" : ""}
+              />
+              {errors.email && <p className="text-destructive text-sm">{errors.email.message}</p>}
             </div>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                {...register("password")}
+                className={errors.password ? "border-destructive focus-visible:ring-destructive" : ""}
+              />
+              {errors.password && <p className="text-destructive text-sm">{errors.password.message}</p>}
+            </div>
+            <Button type="submit" className="h-10 w-full" disabled={loading}>
+              {loading ? "Signing in..." : "Sign in"}
+            </Button>
+            <div className="rounded-lg border bg-muted/40 p-3">
+              <p className="text-center text-xs font-medium text-muted-foreground">Quick test login</p>
+              <div className="mt-2 flex flex-wrap justify-center gap-2">
+                {testCredentials.map(({ label, email, password }) => (
+                  <Button
+                    key={email}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={loading}
+                    onClick={() => fillAndSubmit(email, password)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

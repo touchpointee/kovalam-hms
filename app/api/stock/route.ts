@@ -5,6 +5,8 @@ import { requireAuth, requireRole } from "@/lib/api-auth";
 import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import MedicineStock from "@/models/MedicineStock";
+import StockTransaction from "@/models/StockTransaction";
+import Medicine from "@/models/Medicine";
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,15 +16,38 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
     const medicineId = req.nextUrl.searchParams.get("medicineId");
+    const status = req.nextUrl.searchParams.get("status");
+    const search = (req.nextUrl.searchParams.get("search") ?? "").trim();
+
     if (!medicineId) {
       return NextResponse.json({ message: "medicineId is required" }, { status: 400 });
     }
-    const batches = await MedicineStock.find({ medicine: medicineId })
+
+    const query: Record<string, unknown> = { medicine: medicineId };
+    if (status === "out") query.currentStock = 0;
+    if (status === "low") {
+      query.$expr = { $and: [{ $gt: ["$currentStock", 0] }, { $lt: ["$currentStock", "$minQuantity"] }] };
+    }
+    if (status === "in") {
+      query.$expr = { $gte: ["$currentStock", "$minQuantity"] };
+    }
+
+    const batches = await MedicineStock.find(query)
       .sort({ expiryDate: 1 })
       .populate("medicine", "name unit")
       .populate("addedBy", "name")
       .lean();
-    return NextResponse.json(batches);
+
+    const filtered = search
+      ? batches.filter((b) => {
+          const medName = ((b as { medicine?: { name?: string } }).medicine?.name ?? "").toLowerCase();
+          const batchNo = String((b as { batchNo?: string }).batchNo ?? "").toLowerCase();
+          const q = search.toLowerCase();
+          return medName.includes(q) || batchNo.includes(q);
+        })
+      : batches;
+
+    return NextResponse.json(filtered);
   } catch (e) {
     console.error(e);
     return NextResponse.json(
@@ -39,6 +64,8 @@ const postSchema = z.object({
   mrp: z.number().min(0),
   sellingPrice: z.number().min(0),
   quantityIn: z.number().int().min(1),
+  location: z.string().optional(),
+  supplier: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -59,6 +86,12 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ message: "Validation failed" }, { status: 400 });
     }
+
+    const medicine = await Medicine.findById(parsed.data.medicineId).lean();
+    if (!medicine) {
+      return NextResponse.json({ message: "Medicine not found" }, { status: 404 });
+    }
+
     const userId = (session!.user as { id?: string }).id;
     const stock = await MedicineStock.create({
       medicine: parsed.data.medicineId,
@@ -69,7 +102,22 @@ export async function POST(req: NextRequest) {
       quantityIn: parsed.data.quantityIn,
       quantityOut: 0,
       currentStock: parsed.data.quantityIn,
+      minQuantity: (medicine as { minQuantity?: number }).minQuantity ?? 10,
+      maxQuantity: (medicine as { maxQuantity?: number }).maxQuantity ?? 0,
+      location: parsed.data.location ?? "",
+      supplier: parsed.data.supplier ?? "",
       addedBy: userId,
+    });
+    await StockTransaction.create({
+      medicineStock: stock._id,
+      medicine: stock.medicine,
+      transactionType: "in",
+      quantity: parsed.data.quantityIn,
+      previousQuantity: 0,
+      newQuantity: parsed.data.quantityIn,
+      reason: "Initial stock entry",
+      referenceNumber: "",
+      performedBy: userId,
     });
     const populated = await MedicineStock.findById(stock._id)
       .populate("medicine", "name unit")

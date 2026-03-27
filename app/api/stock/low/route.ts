@@ -4,7 +4,6 @@ import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { requireRole } from "@/lib/api-auth";
 import MedicineStock from "@/models/MedicineStock";
-import { addDays } from "date-fns";
 
 export async function GET() {
   try {
@@ -16,18 +15,41 @@ export async function GET() {
     const forbidden = requireRole(session!, ["admin", "pharmacy"]);
     if (forbidden) return forbidden;
 
-    const today = new Date();
-    const in30Days = addDays(today, 30);
-    const batches = await MedicineStock.find({
-      $or: [
-        { currentStock: { $lt: 10 } },
-        { expiryDate: { $lte: in30Days } },
-      ],
-    })
+    const batches = await MedicineStock.find({})
       .populate("medicine", "name unit")
       .sort({ expiryDate: 1 })
       .lean();
-    return NextResponse.json(batches);
+
+    const now = new Date();
+    const alerts = batches
+      .map((batch) => {
+        const currentStock = Number((batch as { currentStock?: number }).currentStock ?? 0);
+        const minQuantity = Number((batch as { minQuantity?: number }).minQuantity ?? 10);
+        const expiryDate = new Date(String((batch as { expiryDate?: string | Date }).expiryDate ?? now));
+        const msDiff = expiryDate.getTime() - now.getTime();
+        const daysToExpiry = Math.ceil(msDiff / (1000 * 60 * 60 * 24));
+        const isOutOfStock = currentStock === 0;
+        const isLowStock = currentStock > 0 && currentStock < minQuantity;
+        const isCriticalStock = currentStock <= Math.max(1, Math.floor(minQuantity / 2));
+        const isExpired = daysToExpiry < 0;
+        const isExpiringSoon = daysToExpiry >= 0 && daysToExpiry <= 30;
+        const isAlert = isOutOfStock || isLowStock || isExpired || isExpiringSoon;
+
+        return {
+          ...batch,
+          minQuantity,
+          daysToExpiry,
+          isOutOfStock,
+          isLowStock,
+          isCriticalStock,
+          isExpired,
+          isExpiringSoon,
+          isAlert,
+        };
+      })
+      .filter((batch) => batch.isAlert);
+
+    return NextResponse.json(alerts);
   } catch (e) {
     console.error(e);
     return NextResponse.json(

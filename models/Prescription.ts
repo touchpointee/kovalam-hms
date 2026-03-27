@@ -17,6 +17,7 @@ const prescriptionSchema = new mongoose.Schema(
     patient: { type: mongoose.Schema.Types.ObjectId, ref: "Patient", required: true },
     visit: { type: mongoose.Schema.Types.ObjectId, ref: "OPVisit", required: true },
     doctor: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    prescribedByRole: { type: String, enum: ["doctor", "frontdesk"], default: "doctor" },
     medicines: [prescriptionMedicineSchema],
     procedures: [{ type: mongoose.Schema.Types.ObjectId, ref: "Procedure" }],
     notes: { type: String },

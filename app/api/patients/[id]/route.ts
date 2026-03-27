@@ -53,6 +53,7 @@ export async function GET(
 
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
+  regNo: z.string().min(1).optional(),
   age: z.number().min(0).optional(),
   gender: z.enum(["male", "female", "other"]).optional(),
   phone: z.string().min(1).optional(),
@@ -83,7 +84,18 @@ export async function PUT(
     if (!parsed.success) {
       return NextResponse.json({ message: "Validation failed" }, { status: 400 });
     }
-    const patient = await Patient.findByIdAndUpdate(id, { $set: parsed.data }, { new: true }).lean();
+    const role = (session!.user as { role?: string }).role;
+    const payload = { ...parsed.data };
+    if (payload.regNo !== undefined && role !== "admin") {
+      delete (payload as { regNo?: string }).regNo;
+    }
+    if (payload.regNo) {
+      const dup = await Patient.findOne({ regNo: payload.regNo, _id: { $ne: id } }).lean();
+      if (dup) {
+        return NextResponse.json({ message: "Registration number already in use" }, { status: 400 });
+      }
+    }
+    const patient = await Patient.findByIdAndUpdate(id, { $set: payload }, { new: true }).lean();
     if (!patient) return NextResponse.json({ message: "Patient not found" }, { status: 404 });
     return NextResponse.json(patient);
   } catch (e) {

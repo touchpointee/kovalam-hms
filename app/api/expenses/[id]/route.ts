@@ -22,7 +22,7 @@ export async function PUT(
     await dbConnect();
     const { session, error } = await requireAuth();
     if (error) return error;
-    const forbidden = requireRole(session!, ["admin"]);
+    const forbidden = requireRole(session!, ["admin", "frontdesk"]);
     if (forbidden) return forbidden;
 
     const { id } = await params;
@@ -61,7 +61,7 @@ export async function DELETE(
     await dbConnect();
     const { session, error } = await requireAuth();
     if (error) return error;
-    const forbidden = requireRole(session!, ["admin"]);
+    const forbidden = requireRole(session!, ["admin", "frontdesk"]);
     if (forbidden) return forbidden;
 
     const { id } = await params;

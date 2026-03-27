@@ -5,25 +5,25 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         default:
-          "text-slate-800 nm-raised nm-btn-active hover:bg-[#3d3566] hover:text-white transition-all",
+          "bg-blue-800 text-white shadow-sm hover:bg-blue-900",
         destructive:
-          "text-red-600 nm-raised nm-btn-active hover:bg-[#3d3566] hover:text-white transition-all",
+          "bg-red-600 text-white shadow-sm hover:bg-red-700",
         outline:
-          "nm-raised text-slate-800 hover:bg-[#3d3566] hover:text-white transition-all",
+          "border border-blue-200 bg-blue-100 text-blue-800 shadow-sm hover:bg-blue-200",
         secondary:
-          "nm-raised text-slate-600 nm-btn-active hover:bg-[#3d3566] hover:text-white transition-all",
-        ghost: "nm-raised text-slate-800 hover:text-white hover:bg-[#3d3566] transition-all",
-        link: "text-[#3d3566] underline-offset-4 hover:underline",
+          "bg-blue-100 text-blue-800 shadow-sm hover:bg-blue-200",
+        ghost: "hover:bg-blue-50 hover:text-blue-800",
+        link: "text-blue-700 underline-offset-4 hover:underline",
       },
       size: {
         default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-xl px-3 text-xs",
-        lg: "h-10 rounded-xl px-8",
+        sm: "h-8 rounded-lg px-3 text-xs",
+        lg: "h-10 rounded-lg px-8",
         icon: "h-9 w-9",
       },
     },

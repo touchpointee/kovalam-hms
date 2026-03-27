@@ -5,6 +5,7 @@ import { requireAuth, requireRole } from "@/lib/api-auth";
 import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import Prescription from "@/models/Prescription";
+import OPVisit from "@/models/OPVisit";
 
 const medicineItemSchema = z.object({
   medicine: z.string().optional(),
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
     await dbConnect();
     const { session, error } = await requireAuth();
     if (error) return error;
-    const forbidden = requireRole(session!, ["doctor"]);
+    const forbidden = requireRole(session!, ["doctor", "frontdesk"]);
     if (forbidden) return forbidden;
 
     const body = await req.json();
@@ -68,6 +69,8 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = (session!.user as { id?: string }).id;
+    const userRole = (session!.user as { role?: string }).role;
+    const prescribedByRole = userRole === "frontdesk" ? "frontdesk" : "doctor";
     const medicines = (parsed.data.medicines ?? []).map((m) => ({
       medicine: m.medicine || undefined,
       medicineName: m.medicineName,
@@ -77,6 +80,17 @@ export async function POST(req: NextRequest) {
       instructions: m.instructions,
     }));
 
+    const visit = await OPVisit.findById(parsed.data.visitId).lean() as { patient?: string; status?: string } | null;
+    if (!visit) {
+      return NextResponse.json({ message: "Visit not found" }, { status: 404 });
+    }
+    if (String(visit.patient) !== parsed.data.patientId) {
+      return NextResponse.json({ message: "Visit does not belong to patient" }, { status: 400 });
+    }
+    if (visit.status === "served") {
+      return NextResponse.json({ message: "Visit already served. Prescription is locked." }, { status: 409 });
+    }
+
     const prescription = await Prescription.findOneAndUpdate(
       { patient: parsed.data.patientId, visit: parsed.data.visitId },
       {
@@ -84,6 +98,7 @@ export async function POST(req: NextRequest) {
           patient: parsed.data.patientId,
           visit: parsed.data.visitId,
           doctor: userId,
+          prescribedByRole,
           medicines,
           procedures: parsed.data.procedures ?? [],
           notes: parsed.data.notes ?? "",

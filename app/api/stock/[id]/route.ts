@@ -3,11 +3,14 @@ import { z } from "zod";
 import { dbConnect } from "@/lib/mongoose";
 import { requireAuth, requireRole } from "@/lib/api-auth";
 import MedicineStock from "@/models/MedicineStock";
+import StockTransaction from "@/models/StockTransaction";
 import mongoose from "mongoose";
 
 const putSchema = z.object({
-  adjustQty: z.number().int(),
+  transactionType: z.enum(["in", "out", "adjustment"]),
+  quantity: z.number().int().min(1),
   reason: z.string().optional(),
+  referenceNumber: z.string().optional(),
 });
 
 export async function PUT(
@@ -28,7 +31,7 @@ export async function PUT(
     const body = await req.json();
     const parsed = putSchema.safeParse({
       ...body,
-      adjustQty: parseInt(String(body.adjustQty), 10),
+      quantity: parseInt(String(body.quantity), 10),
     });
     if (!parsed.success) {
       return NextResponse.json({ message: "Validation failed" }, { status: 400 });
@@ -37,20 +40,37 @@ export async function PUT(
     const stock = await MedicineStock.findById(id);
     if (!stock) return NextResponse.json({ message: "Stock not found" }, { status: 404 });
 
-    const adjustQty = parsed.data.adjustQty;
-    if (adjustQty > 0) {
-      stock.quantityIn += adjustQty;
-      stock.currentStock += adjustQty;
-    } else {
-      const out = Math.abs(adjustQty);
-      if (stock.currentStock < out) {
+    const prevQty = stock.currentStock;
+    let nextQty = prevQty;
+    if (parsed.data.transactionType === "in") {
+      stock.quantityIn += parsed.data.quantity;
+      nextQty = prevQty + parsed.data.quantity;
+    } else if (parsed.data.transactionType === "out") {
+      if (stock.currentStock < parsed.data.quantity) {
         return NextResponse.json({ message: "Insufficient stock" }, { status: 400 });
       }
-      stock.quantityOut += out;
-      stock.currentStock -= out;
+      stock.quantityOut += parsed.data.quantity;
+      nextQty = prevQty - parsed.data.quantity;
+    } else {
+      nextQty = parsed.data.quantity;
     }
+    stock.currentStock = nextQty;
     stock.updatedAt = new Date();
     await stock.save();
+
+    const userId = (session!.user as { id?: string }).id;
+    await StockTransaction.create({
+      medicineStock: stock._id,
+      medicine: stock.medicine,
+      transactionType: parsed.data.transactionType,
+      quantity: parsed.data.quantity,
+      previousQuantity: prevQty,
+      newQuantity: nextQty,
+      reason: parsed.data.reason ?? "",
+      referenceNumber: parsed.data.referenceNumber ?? "",
+      performedBy: userId,
+    });
+
     const updated = await MedicineStock.findById(id)
       .populate("medicine", "name unit")
       .populate("addedBy", "name")
