@@ -20,8 +20,8 @@ export const metadata: Metadata = {
   description: `${hospitalName} Hospital Management System`,
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: [{ url: "/delma-logo.svg", type: "image/svg+xml" }],
-    apple: [{ url: "/delma-logo.svg", type: "image/svg+xml" }],
+    icon: [{ url: "/hospital-logo.png", type: "image/png" }],
+    apple: [{ url: "/hospital-logo.png", type: "image/png" }],
   },
   appleWebApp: {
     capable: true,

@@ -3,7 +3,7 @@ import type { MetadataRoute } from "next";
 const hospitalName = process.env.NEXT_PUBLIC_HOSPITAL_NAME ?? "Hospital";
 
 export default function manifest(): MetadataRoute.Manifest {
-  const logo = "/delma-logo.svg";
+  const logo = "/hospital-logo.png";
   return {
     id: "/",
     name: `${hospitalName} — HMS`,
@@ -19,14 +19,20 @@ export default function manifest(): MetadataRoute.Manifest {
     icons: [
       {
         src: logo,
-        sizes: "any",
-        type: "image/svg+xml",
+        sizes: "192x192",
+        type: "image/png",
         purpose: "any",
       },
       {
         src: logo,
-        sizes: "any",
-        type: "image/svg+xml",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: logo,
+        sizes: "512x512",
+        type: "image/png",
         purpose: "maskable",
       },
     ],

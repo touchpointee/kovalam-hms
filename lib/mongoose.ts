@@ -28,8 +28,10 @@ export async function dbConnect(): Promise<typeof mongoose> {
     cached.promise = mongoose.connect(MONGODB_URI, {
       dbName: "hms",
       bufferCommands: false,
-      serverSelectionTimeoutMS: 30000,
-      connectTimeoutMS: 30000,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 10000,
+      maxPoolSize: 10,
     });
   }
 
