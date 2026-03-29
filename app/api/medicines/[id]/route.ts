@@ -4,11 +4,13 @@ import { dbConnect } from "@/lib/mongoose";
 import { requireAuth, requireRole } from "@/lib/api-auth";
 import Medicine from "@/models/Medicine";
 import mongoose from "mongoose";
+import { withRouteLog } from "@/lib/with-route-log";
 
 const putSchema = z.object({
   name: z.string().min(1).optional(),
   genericName: z.string().optional(),
   category: z.string().optional(),
+  group: z.string().optional(),
   manufacturer: z.string().optional(),
   unit: z.string().optional(),
   minQuantity: z.number().int().min(0).optional(),
@@ -16,10 +18,10 @@ const putSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-export async function PUT(
+export const PUT = withRouteLog("medicines.id.PUT", async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
@@ -50,12 +52,12 @@ export async function PUT(
       { status: 500 }
     );
   }
-}
+});
 
-export async function DELETE(
+export const DELETE = withRouteLog("medicines.id.DELETE", async (
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
@@ -77,4 +79,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-}
+});

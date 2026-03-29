@@ -28,6 +28,7 @@ const roleDashboard: Record<string, string> = {
   doctor: "/doctor/dashboard",
   pharmacy: "/pharmacy/dashboard",
   frontdesk: "/frontdesk/dashboard",
+  laboratory: "/laboratory/dashboard",
 };
 
 export default function LoginPage() {
@@ -53,6 +54,7 @@ export default function LoginPage() {
     { label: "Doctor", email: "doctor@hms.com", password: "password123" },
   { label: "Pharmacist", email: "pharmacy@hms.com", password: "password123" },
     { label: "Front Desk", email: "frontdesk@hms.com", password: "password123" },
+    { label: "Laboratory", email: "laboratory@hms.com", password: "password123" },
   ] as const;
 
   function fillAndSubmit(email: string, password: string) {

@@ -4,16 +4,17 @@ import mongoose from "mongoose";
 import { dbConnect } from "@/lib/mongoose";
 import { requireAuth, requireRole } from "@/lib/api-auth";
 import Supplier from "@/models/Supplier";
+import { withRouteLog } from "@/lib/with-route-log";
 
 const schema = z.object({
   name: z.string().min(1).optional(),
   isActive: z.boolean().optional(),
 });
 
-export async function PUT(
+export const PUT = withRouteLog("suppliers.id.PUT", async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
@@ -46,4 +47,4 @@ export async function PUT(
       { status: 500 }
     );
   }
-}
+});

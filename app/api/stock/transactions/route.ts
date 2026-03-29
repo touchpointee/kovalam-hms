@@ -4,8 +4,9 @@ import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { requireRole } from "@/lib/api-auth";
 import StockTransaction from "@/models/StockTransaction";
+import { withRouteLog } from "@/lib/with-route-log";
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteLog("stock.transactions.GET", async (req: NextRequest) => {
   try {
     await dbConnect();
     const session = await getServerSession(authOptions);
@@ -42,4 +43,4 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

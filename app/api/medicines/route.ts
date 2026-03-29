@@ -5,8 +5,9 @@ import { requireAuth, requireRole } from "@/lib/api-auth";
 import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import Medicine from "@/models/Medicine";
+import { withRouteLog } from "@/lib/with-route-log";
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteLog("medicines.GET", async (req: NextRequest) => {
   try {
     await dbConnect();
     const session = await getServerSession(authOptions);
@@ -29,19 +30,20 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 const postSchema = z.object({
   name: z.string().min(1),
   genericName: z.string().optional(),
   category: z.string().optional(),
+  group: z.string().optional(),
   manufacturer: z.string().optional(),
   unit: z.string().optional(),
   minQuantity: z.number().int().min(0).optional(),
   maxQuantity: z.number().int().min(0).optional(),
 });
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteLog("medicines.POST", async (req: NextRequest) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
@@ -61,6 +63,7 @@ export async function POST(req: NextRequest) {
     const medicine = await Medicine.create({
       ...parsed.data,
       category: parsed.data.category || "",
+      group: parsed.data.group || "",
       unit: parsed.data.unit || "unit",
       minQuantity: parsed.data.minQuantity ?? 10,
       maxQuantity: parsed.data.maxQuantity ?? 0,
@@ -73,4 +76,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

@@ -6,13 +6,14 @@ import ProcedureBill from "@/models/ProcedureBill";
 import MedicineBill from "@/models/MedicineBill";
 import Expense from "@/models/Expense";
 import { parseISO, startOfDay, endOfDay } from "date-fns";
+import { withRouteLog } from "@/lib/with-route-log";
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteLog("reports.GET", async (req: NextRequest) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
     if (error) return error;
-    const forbidden = requireRole(session!, ["admin"]);
+    const forbidden = requireRole(session!, ["admin", "frontdesk"]);
     if (forbidden) return forbidden;
 
     const { searchParams } = new URL(req.url);
@@ -85,4 +86,4 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

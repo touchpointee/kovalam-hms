@@ -26,6 +26,7 @@ export default function AdminSettingsPage() {
   const [newAmount, setNewAmount] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [backingUp, setBackingUp] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings/op-charge")
@@ -64,6 +65,36 @@ export default function AdminSettingsPage() {
       toast.error(e instanceof Error ? e.message : "Failed");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const backupAllData = async () => {
+    setBackingUp(true);
+    try {
+      const res = await fetch("/api/settings/backup");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ message: "Backup failed" }));
+        throw new Error(data.message ?? "Backup failed");
+      }
+
+      const blob = await res.blob();
+      const contentDisposition = res.headers.get("content-disposition") ?? "";
+      const fileNameMatch = contentDisposition.match(/filename="([^"]+)"/i);
+      const fileName = fileNameMatch?.[1] ?? `hms-backup-${new Date().toISOString()}.json`;
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+
+      toast.success("Backup downloaded successfully");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Backup failed");
+    } finally {
+      setBackingUp(false);
     }
   };
 
@@ -109,6 +140,19 @@ export default function AdminSettingsPage() {
           <p><strong>Name:</strong> {hospitalName}</p>
           <p><strong>Address:</strong> {hospitalAddress}</p>
           <p><strong>Phone:</strong> {hospitalPhone}</p>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Data Backup</CardTitle>
+          <CardDescription>
+            Download a full JSON backup of all database records, including inventory and billing data.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={backupAllData} disabled={backingUp}>
+            {backingUp ? "Backing up..." : "Backup All Data"}
+          </Button>
         </CardContent>
       </Card>
     </div>

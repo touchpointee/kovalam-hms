@@ -39,12 +39,13 @@ type User = {
   isActive: boolean;
 };
 
-const ROLES = ["admin", "doctor", "pharmacy", "frontdesk"] as const;
+const ROLES = ["admin", "doctor", "pharmacy", "frontdesk", "laboratory"] as const;
 const roleClass: Record<string, string> = {
   admin: "bg-purple-500/15 text-purple-700",
   doctor: "bg-blue-500/15 text-blue-700",
   pharmacy: "bg-green-500/15 text-green-700",
   frontdesk: "bg-orange-500/15 text-orange-700",
+  laboratory: "bg-teal-500/15 text-teal-700",
 };
 
 export default function AdminUsersPage() {

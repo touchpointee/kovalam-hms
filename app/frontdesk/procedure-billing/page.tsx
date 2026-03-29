@@ -26,34 +26,34 @@ type Visit = {
 };
 
 export default function FrontdeskProcedureBillingPage() {
-  const [todayServedVisits, setTodayServedVisits] = useState<Visit[]>([]);
+  const [todayVisits, setTodayVisits] = useState<Visit[]>([]);
 
-  const loadTodayServedVisits = () => {
+  const loadTodayVisits = () => {
     const today = format(new Date(), "yyyy-MM-dd");
-    fetch(`/api/visits?date=${today}&status=served&includeProcedureBills=true`, { cache: "no-store" })
+    fetch(`/api/visits?date=${today}&includeProcedureBills=true`, { cache: "no-store" })
       .then((res) => res.json())
-      .then((data) => setTodayServedVisits(Array.isArray(data) ? data : data.visits ?? []))
-      .catch(() => setTodayServedVisits([]));
+      .then((data) => setTodayVisits(Array.isArray(data) ? data : data.visits ?? []))
+      .catch(() => setTodayVisits([]));
   };
 
   useEffect(() => {
-    loadTodayServedVisits();
+    loadTodayVisits();
   }, []);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Procedure Billing</h1>
-        <Button variant="outline" onClick={loadTodayServedVisits}>Refresh</Button>
+        <Button variant="outline" onClick={loadTodayVisits}>Refresh</Button>
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>Today&apos;s Served Visits</CardTitle>
-          <CardDescription>Create, reopen, edit, and print procedure bills for served visits</CardDescription>
+          <CardTitle>Today&apos;s OP Visits</CardTitle>
+          <CardDescription>Bill procedures as soon as a visit is registered (no need to wait for served)</CardDescription>
         </CardHeader>
         <CardContent>
-          {todayServedVisits.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No served visits today.</p>
+          {todayVisits.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No visits today.</p>
           ) : (
             <Table>
               <TableHeader>
@@ -62,17 +62,19 @@ export default function FrontdeskProcedureBillingPage() {
                   <TableHead>Reg No</TableHead>
                   <TableHead>Visit Time</TableHead>
                   <TableHead>Receipt</TableHead>
+                  <TableHead>Visit Status</TableHead>
                   <TableHead>Bill Status</TableHead>
                   <TableHead>Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {todayServedVisits.map((visit) => (
+                {todayVisits.map((visit) => (
                   <TableRow key={visit._id}>
                     <TableCell>{visit.patient?.name ?? "-"}</TableCell>
                     <TableCell>{visit.patient?.regNo ?? "-"}</TableCell>
                     <TableCell>{format(new Date(visit.visitDate), "HH:mm")}</TableCell>
                     <TableCell>{visit.receiptNo ?? "-"}</TableCell>
+                    <TableCell className="capitalize">{visit.status ?? "waiting"}</TableCell>
                     <TableCell>
                       {(visit.procedureBills?.length ?? 0) > 0 ? (
                         <Badge className="bg-emerald-600">Billed</Badge>

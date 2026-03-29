@@ -11,13 +11,6 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -70,10 +63,12 @@ type Prescription = {
   notes?: string;
   medicines: PrescriptionMed[];
   procedures?: (string | { _id: string; name?: string })[];
+  labTests?: (string | { _id: string; name?: string })[];
   updatedAt?: string;
   doctor?: { name?: string } | string;
 };
 type Procedure = { _id: string; name: string };
+type LabTest = { _id: string; name: string };
 type HistoryProcedureBill = {
   _id: string;
   grandTotal: number;
@@ -103,8 +98,6 @@ type HistoryVisit = Visit & {
   medicineBills?: HistoryMedicineBill[];
 };
 
-const FREQUENCIES = ["OD", "BD", "TID", "QID", "SOS"];
-
 function resolveProcedureLabels(
   procedures: Prescription["procedures"] | undefined,
   catalog: Procedure[]
@@ -113,6 +106,17 @@ function resolveProcedureLabels(
   return procedures.map((p) => {
     if (typeof p === "string") return catalog.find((x) => x._id === p)?.name ?? p;
     return p.name ?? catalog.find((x) => x._id === p._id)?.name ?? p._id;
+  });
+}
+
+function resolveLabTestLabels(
+  labTests: Prescription["labTests"] | undefined,
+  catalog: LabTest[]
+): string[] {
+  if (!labTests?.length) return [];
+  return labTests.map((t) => {
+    if (typeof t === "string") return catalog.find((x) => x._id === t)?.name ?? t;
+    return t.name ?? catalog.find((x) => x._id === t._id)?.name ?? t._id;
   });
 }
 
@@ -140,6 +144,8 @@ export default function ConsultationPage() {
   const [medicines, setMedicines] = useState<PrescriptionMed[]>([]);
   const [procedureOrders, setProcedureOrders] = useState<string[]>([]);
   const [allProcedures, setAllProcedures] = useState<Procedure[]>([]);
+  const [labTestOrders, setLabTestOrders] = useState<string[]>([]);
+  const [allLabTests, setAllLabTests] = useState<LabTest[]>([]);
   const [medicineSearch, setMedicineSearch] = useState("");
   const [medicineResults, setMedicineResults] = useState<{ _id: string; name: string }[]>([]);
   const [history, setHistory] = useState<HistoryVisit[]>([]);
@@ -158,6 +164,9 @@ export default function ConsultationPage() {
   const [procedureSearch, setProcedureSearch] = useState("");
   const [procedurePickerOpen, setProcedurePickerOpen] = useState(false);
   const procedurePickerRef = useRef<HTMLDivElement>(null);
+  const [labTestSearch, setLabTestSearch] = useState("");
+  const [labTestPickerOpen, setLabTestPickerOpen] = useState(false);
+  const labTestPickerRef = useRef<HTMLDivElement>(null);
   const [historyModalVisit, setHistoryModalVisit] = useState<HistoryVisit | null>(null);
 
   const loadConsultationData = useCallback(async () => {
@@ -186,6 +195,7 @@ export default function ConsultationPage() {
     setNotes(pres?.notes ?? "");
     setMedicines(pres?.medicines ?? []);
     setProcedureOrders((pres?.procedures ?? []).map((p: { _id?: string } | string) => (typeof p === "string" ? p : (p as { _id?: string })._id ?? "")));
+    setLabTestOrders((pres?.labTests ?? []).map((t: { _id?: string } | string) => (typeof t === "string" ? t : (t as { _id?: string })._id ?? "")));
     setHistory(v.map((visit: Visit) => ({
       ...visit,
       prescription: (data.prescriptions ?? []).find((p: Prescription) => p.visit === visit._id),
@@ -203,6 +213,7 @@ export default function ConsultationPage() {
 
   useEffect(() => {
     fetch("/api/procedures", { cache: "no-store" }).then((res) => res.json()).then(setAllProcedures).catch(() => setAllProcedures([]));
+    fetch("/api/lab-tests", { cache: "no-store" }).then((res) => res.json()).then(setAllLabTests).catch(() => setAllLabTests([]));
   }, []);
 
   useEffect(() => {
@@ -222,10 +233,19 @@ export default function ConsultationPage() {
     return allProcedures.filter((p) => p.name.toLowerCase().includes(q));
   }, [allProcedures, procedureSearch]);
 
+  const filteredLabTests = useMemo(() => {
+    const q = labTestSearch.trim().toLowerCase();
+    if (!q) return allLabTests;
+    return allLabTests.filter((t) => t.name.toLowerCase().includes(q));
+  }, [allLabTests, labTestSearch]);
+
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
       if (procedurePickerRef.current && !procedurePickerRef.current.contains(e.target as Node)) {
         setProcedurePickerOpen(false);
+      }
+      if (labTestPickerRef.current && !labTestPickerRef.current.contains(e.target as Node)) {
+        setLabTestPickerOpen(false);
       }
     };
     document.addEventListener("mousedown", onDoc);
@@ -234,7 +254,10 @@ export default function ConsultationPage() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setProcedurePickerOpen(false);
+      if (e.key === "Escape") {
+        setProcedurePickerOpen(false);
+        setLabTestPickerOpen(false);
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -251,8 +274,9 @@ export default function ConsultationPage() {
           patientId: id,
           visitId: latestVisitId,
           notes,
-          medicines: prescription?.medicines ?? [],
-          procedures: prescription?.procedures ?? procedureOrders,
+          medicines,
+          procedures: procedureOrders,
+          labTests: labTestOrders,
         }),
       });
       if (!res.ok) throw new Error("Failed");
@@ -265,40 +289,52 @@ export default function ConsultationPage() {
     }
   };
 
-  const addMedicine = () => {
+  const saveMedicines = useCallback(
+    async (nextMedicines: PrescriptionMed[], successMessage: string) => {
+      if (!latestVisitId || !id) return false;
+      setSaving(true);
+      try {
+        const res = await fetch("/api/prescriptions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            patientId: id,
+            visitId: latestVisitId,
+            notes: prescription?.notes ?? notes,
+            medicines: nextMedicines,
+            procedures: procedureOrders,
+            labTests: labTestOrders,
+          }),
+        });
+        if (!res.ok) throw new Error("Failed");
+        const data = await res.json();
+        setPrescription(data);
+        setMedicines(data?.medicines ?? nextMedicines);
+        toast.success(successMessage);
+        return true;
+      } catch {
+        toast.error("Failed to save prescription");
+        return false;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [id, latestVisitId, prescription?.notes, notes, procedureOrders, labTestOrders]
+  );
+
+  const addMedicine = async () => {
     if (!newMed.medicineName.trim()) return;
-    setMedicines((prev) => [...prev, { ...newMed, medicine: newMed.medicineId || undefined }]);
+    const nextMedicines = [...medicines, { ...newMed, medicine: newMed.medicineId || undefined }];
+    const saved = await saveMedicines(nextMedicines, "Medicine added to prescription");
+    if (!saved) return;
     setNewMed({ medicineName: "", medicineId: "", dosage: "", frequency: "", duration: "", instructions: "" });
     setMedicineSearch("");
     setMedicineResults([]);
   };
 
-  const removeMedicine = (idx: number) => setMedicines((prev) => prev.filter((_, i) => i !== idx));
-
-  const savePrescription = async () => {
-    if (!latestVisitId || !id) return;
-    setSaving(true);
-    try {
-      const res = await fetch("/api/prescriptions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          patientId: id,
-          visitId: latestVisitId,
-          notes: prescription?.notes ?? notes,
-          medicines,
-          procedures: procedureOrders,
-        }),
-      });
-      if (!res.ok) throw new Error("Failed");
-      const data = await res.json();
-      setPrescription(data);
-      toast.success("Prescription saved");
-    } catch {
-      toast.error("Failed to save prescription");
-    } finally {
-      setSaving(false);
-    }
+  const removeMedicine = async (idx: number) => {
+    const nextMedicines = medicines.filter((_, i) => i !== idx);
+    await saveMedicines(nextMedicines, "Medicine removed from prescription");
   };
 
   const saveProcedureOrders = async () => {
@@ -312,8 +348,9 @@ export default function ConsultationPage() {
           patientId: id,
           visitId: latestVisitId,
           notes: prescription?.notes ?? notes,
-          medicines: prescription?.medicines ?? medicines,
+          medicines,
           procedures: procedureOrders,
+          labTests: labTestOrders,
         }),
       });
       if (!res.ok) throw new Error("Failed");
@@ -338,6 +375,43 @@ export default function ConsultationPage() {
   const removeProcedureOrder = (procId: string) => {
     if (isServed) return;
     setProcedureOrders((prev) => prev.filter((p) => p !== procId));
+  };
+
+  const addLabTestOrder = (labTestId: string) => {
+    if (isServed) return;
+    setLabTestOrders((prev) => (prev.includes(labTestId) ? prev : [...prev, labTestId]));
+    setLabTestSearch("");
+    setLabTestPickerOpen(false);
+  };
+
+  const removeLabTestOrder = (labTestId: string) => {
+    if (isServed) return;
+    setLabTestOrders((prev) => prev.filter((t) => t !== labTestId));
+  };
+
+  const saveLabTestOrders = async () => {
+    if (!latestVisitId || !id) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/prescriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientId: id,
+          visitId: latestVisitId,
+          notes: prescription?.notes ?? notes,
+          medicines,
+          procedures: procedureOrders,
+          labTests: labTestOrders,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      toast.success("Lab test orders saved");
+    } catch {
+      toast.error("Failed to save");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const completeServe = async () => {
@@ -479,10 +553,11 @@ export default function ConsultationPage() {
         </CardContent>
       </Card>
       <Tabs defaultValue="notes">
-        <TabsList className="grid w-full max-w-3xl grid-cols-4">
+        <TabsList className="grid w-full max-w-4xl grid-cols-5">
           <TabsTrigger value="notes">Notes</TabsTrigger>
           <TabsTrigger value="prescription">Prescription (Medicines)</TabsTrigger>
           <TabsTrigger value="procedures">Procedures</TabsTrigger>
+          <TabsTrigger value="lab-tests">Lab Tests</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
         <TabsContent value="notes">
@@ -542,17 +617,20 @@ export default function ConsultationPage() {
                 <div><Label>Dosage</Label><Input className="op-input" value={newMed.dosage} disabled={isServed} onChange={(e) => setNewMed((m) => ({ ...m, dosage: e.target.value }))} placeholder="e.g. 500mg" /></div>
                 <div>
                   <Label>Frequency</Label>
-                  <Select value={newMed.frequency} onValueChange={(v) => !isServed && setNewMed((m) => ({ ...m, frequency: v }))}>
-                    <SelectTrigger className="op-input"><SelectValue placeholder="Select" /></SelectTrigger>
-                    <SelectContent>
-                      {FREQUENCIES.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <Input
+                    className="op-input"
+                    value={newMed.frequency}
+                    disabled={isServed}
+                    onChange={(e) => setNewMed((m) => ({ ...m, frequency: e.target.value }))}
+                    placeholder="e.g. OD / morning-evening"
+                  />
                 </div>
                 <div><Label>Duration</Label><Input className="op-input" value={newMed.duration} disabled={isServed} onChange={(e) => setNewMed((m) => ({ ...m, duration: e.target.value }))} placeholder="e.g. 5 days" /></div>
                 <div><Label>Instructions</Label><Input className="op-input" value={newMed.instructions} disabled={isServed} onChange={(e) => setNewMed((m) => ({ ...m, instructions: e.target.value }))} /></div>
               </div>
-              <Button className="op-button-primary" type="button" onClick={addMedicine} disabled={isServed}>Add to Prescription</Button>
+              <Button className="op-button-primary" type="button" onClick={addMedicine} disabled={saving || isServed}>
+                {saving ? "Saving..." : "Add to Prescription"}
+              </Button>
             </CardContent>
           </Card>
           <Card className="mt-4 rounded-2xl border-emerald-100">
@@ -565,14 +643,11 @@ export default function ConsultationPage() {
                   {medicines.map((m, i) => (
                     <li key={i} className="flex items-center justify-between rounded border p-2">
                       <span>{m.medicineName} — {m.dosage} {m.frequency} {m.duration}</span>
-                      <Button variant="ghost" size="sm" disabled={isServed} onClick={() => removeMedicine(i)}>Remove</Button>
+                      <Button variant="ghost" size="sm" disabled={saving || isServed} onClick={() => removeMedicine(i)}>Remove</Button>
                     </li>
                   ))}
                 </ul>
               )}
-              <Button className="op-button-primary mt-2" onClick={savePrescription} disabled={saving || isServed}>
-                {saving ? "Saving..." : "Save Prescription"}
-              </Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -667,6 +742,101 @@ export default function ConsultationPage() {
 
               <Button className="op-button-primary" onClick={saveProcedureOrders} disabled={saving || isServed}>
                 {saving ? "Saving..." : "Save Procedure Orders"}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="lab-tests">
+          <Card className="rounded-2xl border-emerald-100">
+            <CardHeader>
+              <CardTitle>Order lab tests</CardTitle>
+              <CardDescription className="text-sm">
+                Search by name and select lab tests to add. Remove from the list below if needed.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div ref={labTestPickerRef} className="relative">
+                <Label htmlFor="lab-test-search" className="sr-only">
+                  Search lab tests
+                </Label>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="lab-test-search"
+                    className="op-input pl-9"
+                    placeholder="Search lab tests to add…"
+                    value={labTestSearch}
+                    disabled={isServed}
+                    onChange={(e) => setLabTestSearch(e.target.value)}
+                    onFocus={() => !isServed && setLabTestPickerOpen(true)}
+                    autoComplete="off"
+                  />
+                </div>
+                {labTestPickerOpen && !isServed && (
+                  <div
+                    className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-auto rounded-md border bg-background py-1 shadow-md"
+                    role="listbox"
+                  >
+                    {filteredLabTests.length === 0 ? (
+                      <p className="px-3 py-2 text-sm text-muted-foreground">No lab tests match your search.</p>
+                    ) : (
+                      filteredLabTests.map((test) => {
+                        const added = labTestOrders.includes(test._id);
+                        return (
+                          <button
+                            key={test._id}
+                            type="button"
+                            role="option"
+                            aria-selected={added}
+                            disabled={added}
+                            className={cn(
+                              "flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-muted",
+                              added && "cursor-not-allowed opacity-60"
+                            )}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => addLabTestOrder(test._id)}
+                          >
+                            <span>{test.name}</span>
+                            {added ? (
+                              <span className="text-xs text-muted-foreground">Added</span>
+                            ) : null}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {labTestOrders.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No lab tests ordered yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {labTestOrders.map((labTestId) => {
+                    const name = allLabTests.find((t) => t._id === labTestId)?.name ?? labTestId;
+                    return (
+                      <li
+                        key={labTestId}
+                        className="flex items-center justify-between gap-2 rounded-lg border border-emerald-100 bg-emerald-50/30 px-3 py-2 text-sm"
+                      >
+                        <span>{name}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={isServed}
+                          onClick={() => removeLabTestOrder(labTestId)}
+                        >
+                          Remove
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              <Button className="op-button-primary" onClick={saveLabTestOrders} disabled={saving || isServed}>
+                {saving ? "Saving..." : "Save Lab Tests"}
               </Button>
             </CardContent>
           </Card>
@@ -790,6 +960,22 @@ export default function ConsultationPage() {
                         </div>
                       ) : (
                         <p className="text-muted-foreground">No procedures ordered on prescription.</p>
+                      )}
+                      {resolveLabTestLabels(historyModalVisit.prescription.labTests, allLabTests).length >
+                      0 ? (
+                        <div>
+                          <p className="mb-1 font-medium text-foreground">Lab tests ordered</p>
+                          <ul className="list-inside list-disc text-muted-foreground">
+                            {resolveLabTestLabels(
+                              historyModalVisit.prescription.labTests,
+                              allLabTests
+                            ).map((name, idx) => (
+                              <li key={`${name}-${idx}`}>{name}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">No lab tests ordered on prescription.</p>
                       )}
                     </div>
                   ) : (

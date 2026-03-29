@@ -1,8 +1,12 @@
 const { MongoClient } = require('mongodb');
 
-const uri = "mongodb+srv://nithulps:nithul123@cluster0.t55o5tr.mongodb.net/hms?retryWrites=true&w=majority&appName=Cluster0";
+const uri = process.env.MONGODB_URI;
 
 async function testConnection() {
+    if (!uri) {
+        console.error("❌ MONGODB_URI is not set. Please configure it in your environment.");
+        process.exit(1);
+    }
     const client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000 });
     try {
         console.log("Attempting to connect to MongoDB Atlas...");

@@ -15,6 +15,7 @@ export const config = {
     "/doctor/:path*",
     "/pharmacy/:path*",
     "/frontdesk/:path*",
+    "/laboratory/:path*",
     "/api/((?!auth|db-warmup).*)",
   ],
 };

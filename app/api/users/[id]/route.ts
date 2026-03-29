@@ -5,18 +5,19 @@ import { dbConnect } from "@/lib/mongoose";
 import { requireAuth, requireRole } from "@/lib/api-auth";
 import User from "@/models/User";
 import mongoose from "mongoose";
+import { withRouteLog } from "@/lib/with-route-log";
 
 const putSchema = z.object({
   name: z.string().min(1).optional(),
-  role: z.enum(["admin", "doctor", "pharmacy", "frontdesk"]).optional(),
+  role: z.enum(["admin", "doctor", "pharmacy", "frontdesk", "laboratory"]).optional(),
   isActive: z.boolean().optional(),
   newPassword: z.string().min(6).optional(),
 });
 
-export async function PUT(
+export const PUT = withRouteLog("users.id.PUT", async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
@@ -53,4 +54,4 @@ export async function PUT(
       { status: 500 }
     );
   }
-}
+});

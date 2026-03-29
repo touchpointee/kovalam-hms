@@ -3,15 +3,24 @@ import { dbConnect } from "@/lib/mongoose";
 import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { requireRole } from "@/lib/api-auth";
+import "@/models/PaymentMethod";
 import MedicineBill from "@/models/MedicineBill";
 import mongoose from "mongoose";
 import MedicineStock from "@/models/MedicineStock";
 import StockTransaction from "@/models/StockTransaction";
+import { withRouteLog } from "@/lib/with-route-log";
+import { resolvePaymentMethodId } from "@/lib/payment-method";
+import {
+  clampBillOffer,
+  clampLineOffer,
+  grandTotalAfterBillOffer,
+  lineNetAfterOffer,
+} from "@/lib/bill-offers";
 
-export async function GET(
+export const GET = withRouteLog("billing.medicine.billId.GET", async (
   _req: NextRequest,
   { params }: { params: Promise<{ billId: string }> }
-) {
+) => {
   try {
     await dbConnect();
     const session = await getServerSession(authOptions);
@@ -24,9 +33,13 @@ export async function GET(
     }
     const bill = await MedicineBill.findById(billId)
       .populate("patient")
-      .populate("visit")
+      .populate({
+        path: "visit",
+        populate: { path: "doctor", select: "name" },
+      })
       .populate("prescription")
       .populate("billedBy", "name")
+      .populate("paymentMethod", "name code")
       .populate({
         path: "items.medicineStock",
         populate: { path: "medicine", select: "name" },
@@ -41,19 +54,19 @@ export async function GET(
       { status: 500 }
     );
   }
-}
+});
 
-export async function PUT(
+export const PUT = withRouteLog("billing.medicine.billId.PUT", async (
   req: NextRequest,
   { params }: { params: Promise<{ billId: string }> }
-) {
+) => {
   try {
     await dbConnect();
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
-    const forbidden = requireRole(session, ["admin"]);
+    const forbidden = requireRole(session, ["admin", "pharmacy", "frontdesk"]);
     if (forbidden) return forbidden;
 
     const { billId } = await params;
@@ -61,14 +74,16 @@ export async function PUT(
       return NextResponse.json({ message: "Invalid ID" }, { status: 400 });
     }
 
-    const existingBill = await MedicineBill.findById(billId).lean() as {
-      _id: string;
-      visit?: string;
-      items?: Array<{ medicineStock?: string; quantity?: number }>;
-    } | null;
-    if (!existingBill) {
+    const existingBillDoc = await MedicineBill.findById(billId);
+    if (!existingBillDoc) {
       return NextResponse.json({ message: "Bill not found" }, { status: 404 });
     }
+    const existingBill = existingBillDoc.toObject() as {
+      _id: string;
+      visit?: string;
+      paymentMethod?: unknown;
+      items?: Array<{ medicineStock?: string; quantity?: number }>;
+    };
 
     const body = await req.json();
     const items = Array.isArray(body.items) ? body.items : [];
@@ -95,12 +110,18 @@ export async function PUT(
       quantity: number;
       mrp: number;
       sellingPrice: number;
+      lineOffer: number;
       totalPrice: number;
     }> = [];
+
+    const billOfferRaw =
+      typeof body.billOffer === "number" ? body.billOffer : parseFloat(String(body.billOffer ?? 0)) || 0;
 
     for (const item of items) {
       const quantity = typeof item.quantity === "number" ? item.quantity : parseInt(String(item.quantity), 10);
       const sellingPrice = Number(item.sellingPrice);
+      const lineOfferIn =
+        typeof item.lineOffer === "number" ? item.lineOffer : parseFloat(String(item.lineOffer ?? 0)) || 0;
       if (!item.medicineStockId || !quantity || quantity < 1 || Number.isNaN(sellingPrice)) {
         return NextResponse.json({ message: "Validation failed" }, { status: 400 });
       }
@@ -126,6 +147,8 @@ export async function PUT(
         quantity,
         sellingPrice,
       });
+      const gross = sellingPrice * quantity;
+      const lineOffer = clampLineOffer(gross, lineOfferIn);
       billItems.push({
         medicineStock: item.medicineStockId,
         medicineName,
@@ -134,7 +157,8 @@ export async function PUT(
         quantity,
         mrp: stock.mrp,
         sellingPrice,
-        totalPrice: sellingPrice * quantity,
+        lineOffer,
+        totalPrice: lineNetAfterOffer(gross, lineOffer),
       });
     }
 
@@ -187,23 +211,46 @@ export async function PUT(
       });
     }
 
-    const grandTotal = billItems.reduce((sum, item) => sum + item.totalPrice, 0);
+    const linesNetSum = billItems.reduce((sum, item) => sum + item.totalPrice, 0);
+    const grandTotal = grandTotalAfterBillOffer(linesNetSum, billOfferRaw);
+
+    const pmBody = body.paymentMethodId != null ? String(body.paymentMethodId).trim() : "";
+    let paymentMethodUpdate: mongoose.Types.ObjectId | undefined;
+    if (pmBody) {
+      try {
+        paymentMethodUpdate = await resolvePaymentMethodId(pmBody, { required: true });
+      } catch (err) {
+        return NextResponse.json(
+          { message: err instanceof Error ? err.message : "Invalid payment method" },
+          { status: 400 }
+        );
+      }
+    } else if (grandTotal > 0 && !existingBillDoc.paymentMethod) {
+      return NextResponse.json({ message: "Payment method is required" }, { status: 400 });
+    }
+
+    const setPayload: Record<string, unknown> = {
+      items: billItems,
+      billOffer: clampBillOffer(linesNetSum, billOfferRaw),
+      grandTotal,
+      billedAt: new Date(),
+      billedBy: (session.user as { id?: string }).id,
+    };
+    if (paymentMethodUpdate) setPayload.paymentMethod = paymentMethodUpdate;
+
     const updated = await MedicineBill.findByIdAndUpdate(
       billId,
-      {
-        $set: {
-          items: billItems,
-          grandTotal,
-          billedAt: new Date(),
-          billedBy: (session.user as { id?: string }).id,
-        },
-      },
+      { $set: setPayload },
       { new: true }
     )
       .populate("patient")
-      .populate("visit")
+      .populate({
+        path: "visit",
+        populate: { path: "doctor", select: "name" },
+      })
       .populate("prescription")
       .populate("billedBy", "name")
+      .populate("paymentMethod", "name code")
       .populate({
         path: "items.medicineStock",
         populate: { path: "medicine", select: "name" },
@@ -219,4 +266,4 @@ export async function PUT(
       { status: 500 }
     );
   }
-}
+});

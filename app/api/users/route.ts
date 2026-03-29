@@ -4,15 +4,16 @@ import bcrypt from "bcryptjs";
 import { dbConnect } from "@/lib/mongoose";
 import { requireAuth, requireRole } from "@/lib/api-auth";
 import User from "@/models/User";
+import { withRouteLog } from "@/lib/with-route-log";
 
 const postSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(6),
-  role: z.enum(["admin", "doctor", "pharmacy", "frontdesk"]),
+  role: z.enum(["admin", "doctor", "pharmacy", "frontdesk", "laboratory"]),
 });
 
-export async function GET() {
+export const GET = withRouteLog("users.GET", async () => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
@@ -29,21 +30,25 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteLog("users.POST", async (req: NextRequest) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
     if (error) return error;
-    const forbidden = requireRole(session!, ["admin"]);
-    if (forbidden) return forbidden;
 
     const body = await req.json();
     const parsed = postSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ message: "Validation failed" }, { status: 400 });
     }
+
+    const isDoctorOnly = parsed.data.role === "doctor";
+    const forbidden = isDoctorOnly
+      ? requireRole(session!, ["admin", "frontdesk"])
+      : requireRole(session!, ["admin"]);
+    if (forbidden) return forbidden;
     const hashed = await bcrypt.hash(parsed.data.password, 10);
     const user = await User.create({
       name: parsed.data.name,
@@ -61,4 +66,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

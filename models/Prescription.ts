@@ -8,6 +8,8 @@ const prescriptionMedicineSchema = new mongoose.Schema(
     frequency: { type: String },
     duration: { type: String },
     instructions: { type: String },
+    /** Optional fee captured at prescription time (visit data / estimate). */
+    lineFee: { type: Number, min: 0 },
   },
   { _id: false }
 );
@@ -17,9 +19,10 @@ const prescriptionSchema = new mongoose.Schema(
     patient: { type: mongoose.Schema.Types.ObjectId, ref: "Patient", required: true },
     visit: { type: mongoose.Schema.Types.ObjectId, ref: "OPVisit", required: true },
     doctor: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    prescribedByRole: { type: String, enum: ["doctor", "frontdesk"], default: "doctor" },
+    prescribedByRole: { type: String, enum: ["doctor", "frontdesk", "admin"], default: "doctor" },
     medicines: [prescriptionMedicineSchema],
     procedures: [{ type: mongoose.Schema.Types.ObjectId, ref: "Procedure" }],
+    labTests: [{ type: mongoose.Schema.Types.ObjectId, ref: "LabTest" }],
     notes: { type: String },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },

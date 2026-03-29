@@ -2,24 +2,23 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, usePathname } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { differenceInDays, format } from "date-fns";
 import toast from "react-hot-toast";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatPaymentMethodLabel } from "@/lib/utils";
+import { PaymentMethodSelect } from "@/components/PaymentMethodSelect";
+import {
+  grandTotalAfterBillOffer,
+  lineNetAfterOffer,
+} from "@/lib/bill-offers";
 import { PrintLayout } from "@/components/PrintLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableCombobox } from "@/components/SearchableCombobox";
 import {
   Table,
   TableBody,
@@ -29,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { X } from "lucide-react";
+import { useMedicineBillingListHref } from "@/hooks/usePharmacyBase";
 
 type Patient = { _id: string; name: string; regNo: string };
 type Visit = {
@@ -36,6 +36,7 @@ type Visit = {
   visitDate: string;
   receiptNo?: string;
   patient?: Patient;
+  doctor?: { name?: string } | null;
   medicineBills?: Array<{ _id: string }>;
 };
 type PrescriptionMed = { medicineName: string; medicine?: string | { _id: string } };
@@ -67,6 +68,7 @@ type BillItem = {
   quantity: number;
   mrp: number;
   sellingPrice: number;
+  lineOffer: number;
   totalPrice: number;
   currentStock: number;
   stockStatus: "in_stock" | "no_stock";
@@ -79,11 +81,14 @@ type MedicineBill = {
   billedAt?: string;
   items: BillItem[];
   grandTotal: number;
+  billOffer?: number;
+  paymentMethod?: { _id?: string; name?: string; code?: string } | null;
 };
 type StoredMedicineBill = {
   _id: string;
   patient?: Patient;
   billedAt?: string;
+  paymentMethod?: { _id?: string; name?: string; code?: string } | null;
   items: Array<{
     medicineStock?: {
       _id?: string;
@@ -96,15 +101,19 @@ type StoredMedicineBill = {
     mrp: number;
     sellingPrice: number;
     totalPrice: number;
+    lineOffer?: number;
   }>;
   grandTotal: number;
+  billOffer?: number;
 };
 
 export default function VisitMedicineBillingPage() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "admin";
-  const pathname = usePathname();
-  const visitListBackHref = pathname.startsWith("/admin/") ? "/admin/visits" : "/pharmacy/billing";
+  const role = session?.user?.role;
+  const canEditMedicineBill =
+    isAdmin || role === "pharmacy" || role === "frontdesk";
+  const visitListBackHref = useMedicineBillingListHref();
   const params = useParams<{ visitId: string }>();
   const visitId = params?.visitId ?? "";
 
@@ -117,6 +126,8 @@ export default function VisitMedicineBillingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [bill, setBill] = useState<MedicineBill | null>(null);
   const [editingBill, setEditingBill] = useState(false);
+  const [billOffer, setBillOffer] = useState(0);
+  const [paymentMethodId, setPaymentMethodId] = useState("");
 
   const buildBillItem = (medicineId: string | undefined, medicineName: string, batches: StockBatch[], source: "prescription" | "manual"): BillItem => {
     const availableBatches = [...batches]
@@ -135,6 +146,7 @@ export default function VisitMedicineBillingPage() {
         quantity: 0,
         mrp: 0,
         sellingPrice: 0,
+        lineOffer: 0,
         totalPrice: 0,
         currentStock: 0,
         stockStatus: "no_stock",
@@ -153,6 +165,7 @@ export default function VisitMedicineBillingPage() {
       quantity: 1,
       mrp: batch.mrp,
       sellingPrice: batch.sellingPrice,
+      lineOffer: 0,
       totalPrice: batch.sellingPrice,
       currentStock: batch.currentStock,
       stockStatus: "in_stock",
@@ -182,6 +195,10 @@ export default function VisitMedicineBillingPage() {
           return buildBillItem(medicineId, item.medicineName, batches ?? [], "manual");
         }
 
+        const q = Math.min(item.quantity, selectedBatch.currentStock);
+        const sp = Number(item.sellingPrice) || selectedBatch.sellingPrice;
+        const lineOffer = Number(item.lineOffer) || 0;
+        const gross = sp * q;
         return {
           id: `${medicineId}-${selectedBatch._id}-saved-${Math.random().toString(36).slice(2, 9)}`,
           medicineId,
@@ -189,10 +206,11 @@ export default function VisitMedicineBillingPage() {
           medicineName: item.medicineName,
           batchNo: selectedBatch.batchNo,
           expiryDate: selectedBatch.expiryDate,
-          quantity: Math.min(item.quantity, selectedBatch.currentStock),
+          quantity: q,
           mrp: selectedBatch.mrp,
-          sellingPrice: selectedBatch.sellingPrice,
-          totalPrice: selectedBatch.sellingPrice * Math.min(item.quantity, selectedBatch.currentStock),
+          sellingPrice: sp,
+          lineOffer,
+          totalPrice: lineNetAfterOffer(gross, lineOffer),
           currentStock: selectedBatch.currentStock,
           stockStatus: "in_stock",
           availableBatches,
@@ -202,6 +220,9 @@ export default function VisitMedicineBillingPage() {
     );
 
     setItems(rows);
+    setBillOffer(Number(storedBill.billOffer) || 0);
+    const pm = storedBill.paymentMethod;
+    setPaymentMethodId(pm?._id ? String(pm._id) : "");
   }, []);
 
   useEffect(() => {
@@ -229,6 +250,7 @@ export default function VisitMedicineBillingPage() {
           await hydrateStoredBillItems(storedBill);
         } else {
           setBill(null);
+          setPaymentMethodId("");
           setEditingBill(true);
         }
         return fetch(
@@ -276,7 +298,28 @@ export default function VisitMedicineBillingPage() {
     if (!item || item.stockStatus === "no_stock" || qty < 0 || qty > item.currentStock) return;
     setItems((prev) => {
       const next = [...prev];
-      next[idx] = { ...next[idx], quantity: qty, totalPrice: next[idx].sellingPrice * qty };
+      const row = next[idx];
+      const gross = row.sellingPrice * qty;
+      next[idx] = {
+        ...row,
+        quantity: qty,
+        totalPrice: lineNetAfterOffer(gross, row.lineOffer),
+      };
+      return next;
+    });
+  };
+
+  const updateLineOffer = (idx: number, raw: number) => {
+    setItems((prev) => {
+      const next = [...prev];
+      const row = next[idx];
+      const gross = row.sellingPrice * row.quantity;
+      const lineOffer = Math.max(0, raw);
+      next[idx] = {
+        ...row,
+        lineOffer,
+        totalPrice: lineNetAfterOffer(gross, lineOffer),
+      };
       return next;
     });
   };
@@ -290,17 +333,19 @@ export default function VisitMedicineBillingPage() {
     setItems((prev) => {
       const next = [...prev];
       const quantity = Math.min(Math.max(next[idx].quantity, 1), nextBatch.currentStock);
+      const row = next[idx];
+      const gross = nextBatch.sellingPrice * quantity;
       next[idx] = {
-        ...next[idx],
+        ...row,
         medicineStockId: nextBatch._id,
-        medicineName: nextBatch.medicine?.name ?? next[idx].medicineName,
+        medicineName: nextBatch.medicine?.name ?? row.medicineName,
         batchNo: nextBatch.batchNo,
         expiryDate: nextBatch.expiryDate,
         mrp: nextBatch.mrp,
         sellingPrice: nextBatch.sellingPrice,
         currentStock: nextBatch.currentStock,
         quantity,
-        totalPrice: nextBatch.sellingPrice * quantity,
+        totalPrice: lineNetAfterOffer(gross, row.lineOffer),
         stockStatus: "in_stock",
       };
       return next;
@@ -334,7 +379,14 @@ export default function VisitMedicineBillingPage() {
     [items]
   );
 
-  const grandTotal = useMemo(() => billableItems.reduce((sum, row) => sum + row.totalPrice, 0), [billableItems]);
+  const linesNetSum = useMemo(
+    () => billableItems.reduce((sum, row) => sum + row.totalPrice, 0),
+    [billableItems]
+  );
+  const grandTotal = useMemo(
+    () => grandTotalAfterBillOffer(linesNetSum, billOffer),
+    [linesNetSum, billOffer]
+  );
 
   const generateBill = async () => {
     if (!visit?.patient?._id || !visit?._id || billableItems.length === 0) {
@@ -343,6 +395,10 @@ export default function VisitMedicineBillingPage() {
       } else {
         toast.error("Visit details missing");
       }
+      return;
+    }
+    if (grandTotal > 0 && !paymentMethodId.trim()) {
+      toast.error("Select a payment method");
       return;
     }
     setSubmitting(true);
@@ -355,10 +411,15 @@ export default function VisitMedicineBillingPage() {
           patientId: visit.patient._id,
           visitId: visit._id,
           prescriptionId: prescription?._id,
+          billOffer,
+          ...(grandTotal > 0 && paymentMethodId.trim()
+            ? { paymentMethodId: paymentMethodId.trim() }
+            : {}),
           items: billableItems.map((i) => ({
             medicineStockId: i.medicineStockId,
             quantity: i.quantity,
             sellingPrice: i.sellingPrice,
+            ...(i.lineOffer > 0 ? { lineOffer: i.lineOffer } : {}),
           })),
         }),
       });
@@ -393,7 +454,7 @@ export default function VisitMedicineBillingPage() {
             <Button asChild variant="outline">
               <Link href={visitListBackHref}>Back to Visit List</Link>
             </Button>
-            {isAdmin && (
+            {canEditMedicineBill && (
               <Button variant="outline" onClick={() => setEditingBill(true)}>
                 Edit Bill
               </Button>
@@ -419,8 +480,19 @@ export default function VisitMedicineBillingPage() {
             </div>
             <div className="space-y-2">
               <div className="grid grid-cols-[150px_1fr]">
-                <span>Appointment Date</span>
-                <span>: {bill.billedAt ? format(new Date(bill.billedAt), "dd-MM-yyyy") : "-"}</span>
+                <span>Consultation date and time</span>
+                <span>
+                  :{" "}
+                  {visit?.visitDate
+                    ? format(new Date(visit.visitDate), "dd MMM yyyy, HH:mm")
+                    : "—"}
+                </span>
+              </div>
+              <div className="grid grid-cols-[150px_1fr]">
+                <span>Bill date and time</span>
+                <span>
+                  : {bill.billedAt ? format(new Date(bill.billedAt), "dd MMM yyyy, HH:mm") : "—"}
+                </span>
               </div>
               <div className="grid grid-cols-[150px_1fr]">
                 <span>Age</span>
@@ -428,7 +500,14 @@ export default function VisitMedicineBillingPage() {
               </div>
               <div className="grid grid-cols-[150px_1fr]">
                 <span>Consultant Doctor</span>
-                <span>: -</span>
+                <span>
+                  :{" "}
+                  {visit?.doctor?.name?.trim()
+                    ? visit.doctor.name
+                    : prescription?.doctor?.name?.trim()
+                      ? prescription.doctor.name
+                      : "—"}
+                </span>
               </div>
             </div>
           </div>
@@ -439,29 +518,70 @@ export default function VisitMedicineBillingPage() {
                 <th className="border border-slate-400 px-3 py-2 text-left font-semibold">Description</th>
                 <th className="border border-slate-400 px-3 py-2 text-center font-semibold">Qty</th>
                 <th className="border border-slate-400 px-3 py-2 text-right font-semibold">Rate</th>
-                <th className="border border-slate-400 px-3 py-2 text-right font-semibold">Amount ($)</th>
+                <th className="border border-slate-400 px-3 py-2 text-right font-semibold">Line offer</th>
+                <th className="border border-slate-400 px-3 py-2 text-right font-semibold">Amount (₹)</th>
               </tr>
             </thead>
             <tbody>
-              {bill.items.map((row, i) => (
-                <tr key={i}>
-                  <td className="border border-slate-400 px-3 py-2 align-top">{i + 1}</td>
-                  <td className="border border-slate-400 px-3 py-2 align-top">
-                    <div>{row.medicineName}</div>
-                  </td>
-                  <td className="border border-slate-400 px-3 py-2 text-center align-top">{row.quantity}</td>
-                  <td className="border border-slate-400 px-3 py-2 text-right align-top">{formatCurrency(row.sellingPrice)}</td>
-                  <td className="border border-slate-400 px-3 py-2 text-right align-top">{formatCurrency(row.totalPrice)}</td>
-                </tr>
-              ))}
+              {bill.items.map((row, i) => {
+                const lo = Number((row as BillItem).lineOffer) || 0;
+                return (
+                  <tr key={i}>
+                    <td className="border border-slate-400 px-3 py-2 align-top">{i + 1}</td>
+                    <td className="border border-slate-400 px-3 py-2 align-top">
+                      <div>{row.medicineName}</div>
+                    </td>
+                    <td className="border border-slate-400 px-3 py-2 text-center align-top">{row.quantity}</td>
+                    <td className="border border-slate-400 px-3 py-2 text-right align-top">{formatCurrency(row.sellingPrice)}</td>
+                    <td className="border border-slate-400 px-3 py-2 text-right align-top">
+                      {lo > 0 ? formatCurrency(lo) : "—"}
+                    </td>
+                    <td className="border border-slate-400 px-3 py-2 text-right align-top">{formatCurrency(row.totalPrice)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
-          <div className="ml-auto grid w-[320px] grid-cols-[1fr_120px] gap-y-1 pt-8 text-[15px]">
-            <div className="border-b border-slate-300 py-1">Amount</div>
-            <div className="border-b border-slate-300 py-1 text-right">{formatCurrency(bill.grandTotal)}</div>
-            <div className="py-1 font-semibold">Net Amount</div>
-            <div className="py-1 text-right font-semibold">{formatCurrency(bill.grandTotal)}</div>
-          </div>
+          {(() => {
+            const grossSum = bill.items.reduce(
+              (s, r) => s + Number(r.sellingPrice) * Number(r.quantity),
+              0
+            );
+            const lineOfferSum = bill.items.reduce(
+              (s, r) => s + (Number((r as BillItem).lineOffer) || 0),
+              0
+            );
+            const linesNet = bill.items.reduce((s, r) => s + Number(r.totalPrice), 0);
+            const bo = Number(bill.billOffer) || 0;
+            return (
+              <div className="ml-auto grid w-[340px] grid-cols-[1fr_120px] gap-y-1 pt-8 text-[15px]">
+                <div className="border-b border-slate-300 py-1">Subtotal (gross)</div>
+                <div className="border-b border-slate-300 py-1 text-right">{formatCurrency(grossSum)}</div>
+                <div className="border-b border-slate-300 py-1">Line offers</div>
+                <div className="border-b border-slate-300 py-1 text-right text-red-700">
+                  {lineOfferSum > 0 ? `−${formatCurrency(lineOfferSum)}` : "—"}
+                </div>
+                <div className="border-b border-slate-300 py-1">After line offers</div>
+                <div className="border-b border-slate-300 py-1 text-right">{formatCurrency(linesNet)}</div>
+                {bo > 0 ? (
+                  <>
+                    <div className="border-b border-slate-300 py-1">Bill offer</div>
+                    <div className="border-b border-slate-300 py-1 text-right text-red-700">−{formatCurrency(bo)}</div>
+                  </>
+                ) : null}
+                {formatPaymentMethodLabel(bill.paymentMethod) ? (
+                  <>
+                    <div className="border-b border-slate-300 py-1">Payment method</div>
+                    <div className="border-b border-slate-300 py-1 text-right">
+                      {formatPaymentMethodLabel(bill.paymentMethod)}
+                    </div>
+                  </>
+                ) : null}
+                <div className="py-1 font-semibold">Net amount</div>
+                <div className="py-1 text-right font-semibold">{formatCurrency(bill.grandTotal)}</div>
+              </div>
+            );
+          })()}
         </div>
       </PrintLayout>
     );
@@ -507,28 +627,32 @@ export default function VisitMedicineBillingPage() {
               <CardTitle>Prescription Medicines</CardTitle>
               <CardDescription>
                 {prescription?.doctor?.name
-                  ? `Prescribed by ${prescription.doctor.name}`
-                  : "Pharmacist can add medicines and change batches before billing"}
+                  ? `Prescribed by ${prescription.doctor.name}. Search to add medicines or change batches.`
+                  : "Search the catalog to add medicines; adjust batches before billing."}
               </CardDescription>
             </CardHeader>
             <CardContent>
               {!prescription && (
                 <p className="mb-4 text-sm text-muted-foreground">No prescription found for this visit. You can add medicines manually.</p>
               )}
-              
-                <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border p-4">
-                  <div className="grid min-w-[260px] gap-2">
-                    <Label>Add Medicine</Label>
-                    <Select value={selectedMedicineId} onValueChange={setSelectedMedicineId}>
-                      <SelectTrigger><SelectValue placeholder="Select medicine" /></SelectTrigger>
-                      <SelectContent>
-                        {medicineOptions.map((medicine) => (
-                          <SelectItem key={medicine._id} value={medicine._id}>{medicine.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+
+                <div className="mb-4 rounded-xl border border-blue-100 bg-slate-50/60 p-4 shadow-sm">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+                    <div className="grid min-w-[min(100%,18rem)] flex-1 gap-2 sm:max-w-md">
+                      <Label>Add medicine</Label>
+                      <SearchableCombobox
+                        options={medicineOptions.map((m) => ({ value: m._id, label: m.name }))}
+                        value={selectedMedicineId}
+                        onValueChange={setSelectedMedicineId}
+                        placeholder="Search or select medicine"
+                        searchPlaceholder="Type to filter…"
+                        emptyMessage="No medicines match."
+                      />
+                    </div>
+                    <Button type="button" className="shrink-0" onClick={addMedicineToBill}>
+                      Add medicine
+                    </Button>
                   </div>
-                  <Button type="button" onClick={addMedicineToBill}>Add Medicine</Button>
                 </div>
 
                 {items.length === 0 ? (
@@ -543,6 +667,7 @@ export default function VisitMedicineBillingPage() {
                           <TableHead>Expiry</TableHead>
                           <TableHead>Qty</TableHead>
                           <TableHead>Price</TableHead>
+                          <TableHead>Line offer</TableHead>
                           <TableHead>Total</TableHead>
                           <TableHead>Action</TableHead>
                         </TableRow>
@@ -555,16 +680,20 @@ export default function VisitMedicineBillingPage() {
                               {row.stockStatus === "no_stock" ? (
                                 "-"
                               ) : (
-                                <Select value={row.medicineStockId} onValueChange={(value) => updateItemBatch(idx, value)}>
-                                  <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    {row.availableBatches.map((batch) => (
-                                      <SelectItem key={batch._id} value={batch._id}>
-                                        {batch.batchNo} ({batch.currentStock})
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                <SearchableCombobox
+                                  options={row.availableBatches.map((batch) => ({
+                                    value: batch._id,
+                                    label: `${batch.batchNo} · exp ${format(new Date(batch.expiryDate), "dd/MM/yy")} · ${batch.currentStock} u · ${formatCurrency(batch.sellingPrice)}`,
+                                    keywords: `${batch.batchNo} ${batch.mrp} ${batch.sellingPrice}`,
+                                  }))}
+                                  value={row.medicineStockId ?? ""}
+                                  onValueChange={(value) => updateItemBatch(idx, value)}
+                                  placeholder="Batch"
+                                  searchPlaceholder="Search batch…"
+                                  emptyMessage="No batches."
+                                  triggerClassName="h-9 w-full min-w-[11rem] max-w-[240px] justify-between"
+                                  contentClassName="min-w-[18rem]"
+                                />
                               )}
                             </TableCell>
                             <TableCell>
@@ -592,6 +721,23 @@ export default function VisitMedicineBillingPage() {
                               {row.stockStatus === "no_stock" ? "-" : formatCurrency(row.sellingPrice)}
                             </TableCell>
                             <TableCell>
+                              {row.stockStatus === "no_stock" ? (
+                                "-"
+                              ) : (
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step="0.01"
+                                  value={row.lineOffer || ""}
+                                  placeholder="0"
+                                  onChange={(e) =>
+                                    updateLineOffer(idx, parseFloat(e.target.value) || 0)
+                                  }
+                                  className="w-24 tabular-nums"
+                                />
+                              )}
+                            </TableCell>
+                            <TableCell>
                               {row.stockStatus === "no_stock" ? "-" : formatCurrency(row.totalPrice)}
                             </TableCell>
                             <TableCell>
@@ -603,8 +749,34 @@ export default function VisitMedicineBillingPage() {
                         ))}
                       </TableBody>
                     </Table>
+                    <div className="mt-4 flex max-w-md flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/80 p-4">
+                      <Label htmlFor="med-bill-offer">Offer on whole bill (amount)</Label>
+                      <Input
+                        id="med-bill-offer"
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={billOffer || ""}
+                        placeholder="0"
+                        onChange={(e) => setBillOffer(Math.max(0, parseFloat(e.target.value) || 0))}
+                        className="max-w-[12rem] tabular-nums"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        After line offers: {formatCurrency(linesNetSum)}
+                        {billOffer > 0 ? ` · Net: ${formatCurrency(grandTotal)}` : ""}
+                      </p>
+                    </div>
+                    <PaymentMethodSelect
+                      className="mt-4 max-w-md"
+                      value={paymentMethodId}
+                      onValueChange={setPaymentMethodId}
+                      required={grandTotal > 0}
+                      onOptionsLoaded={(opts) => {
+                        setPaymentMethodId((id) => id || opts[0]?._id || "");
+                      }}
+                    />
                     <div className="mt-4 flex items-center justify-between">
-                      <p className="text-sm font-semibold">Total: {formatCurrency(grandTotal)}</p>
+                      <p className="text-sm font-semibold">Net total: {formatCurrency(grandTotal)}</p>
                       <Button onClick={generateBill} disabled={submitting || billableItems.length === 0}>
                         {submitting ? (bill ? "Updating..." : "Generating...") : (bill ? "Update Bill" : "Generate Bill")}
                       </Button>

@@ -4,8 +4,9 @@ import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { requireRole } from "@/lib/api-auth";
 import MedicineStock from "@/models/MedicineStock";
+import { withRouteLog } from "@/lib/with-route-log";
 
-export async function GET() {
+export const GET = withRouteLog("stock.low.GET", async () => {
   try {
     await dbConnect();
     const session = await getServerSession(authOptions);
@@ -57,4 +58,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+});

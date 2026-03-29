@@ -2,12 +2,20 @@ import { dbConnect } from "./mongoose";
 import Patient from "@/models/Patient";
 import OPVisit from "@/models/OPVisit";
 
+const REG_NO_PREFIX = "DMC";
+
 export async function generateRegNo(): Promise<string> {
   await dbConnect();
-  const latest = await Patient.findOne().sort({ regNo: -1 }).select("regNo").lean() as { regNo?: string } | null;
-  if (!latest?.regNo) return "P-0001";
-  const num = parseInt(latest.regNo.replace(/^P-/, ""), 10) || 0;
-  return `P-${String(num + 1).padStart(4, "0")}`;
+  const docs = (await Patient.find({ regNo: new RegExp(`^${REG_NO_PREFIX}\\d+$`) })
+    .select("regNo")
+    .lean()) as { regNo?: string }[];
+  let max = 0;
+  for (const d of docs) {
+    const m = d.regNo?.match(new RegExp(`^${REG_NO_PREFIX}(\\d+)$`));
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  const next = max + 1;
+  return `${REG_NO_PREFIX}${String(next).padStart(3, "0")}`;
 }
 
 export async function generateReceiptNo(): Promise<string> {

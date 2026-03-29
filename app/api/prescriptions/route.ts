@@ -6,6 +6,10 @@ import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import Prescription from "@/models/Prescription";
 import OPVisit from "@/models/OPVisit";
+import "@/models/Medicine";
+import "@/models/Procedure";
+import { syncLabBillForVisitItems } from "@/lib/sync-lab-bill";
+import { withRouteLog } from "@/lib/with-route-log";
 
 const medicineItemSchema = z.object({
   medicine: z.string().optional(),
@@ -14,6 +18,7 @@ const medicineItemSchema = z.object({
   frequency: z.string().optional(),
   duration: z.string().optional(),
   instructions: z.string().optional(),
+  lineFee: z.number().min(0).optional(),
 });
 
 const postSchema = z.object({
@@ -21,10 +26,11 @@ const postSchema = z.object({
   visitId: z.string().min(1),
   medicines: z.array(medicineItemSchema).optional(),
   procedures: z.array(z.string()).optional(),
+  labTests: z.array(z.string()).optional(),
   notes: z.string().optional(),
 });
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteLog("prescriptions.GET", async (req: NextRequest) => {
   try {
     await dbConnect();
     const session = await getServerSession(authOptions);
@@ -43,6 +49,7 @@ export async function GET(req: NextRequest) {
       .populate("doctor", "name")
       .populate("medicines.medicine")
       .populate("procedures")
+      .populate("labTests")
       .lean();
     return NextResponse.json(prescription);
   } catch (e) {
@@ -52,14 +59,14 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteLog("prescriptions.POST", async (req: NextRequest) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
     if (error) return error;
-    const forbidden = requireRole(session!, ["doctor", "frontdesk"]);
+    const forbidden = requireRole(session!, ["doctor", "frontdesk", "admin"]);
     if (forbidden) return forbidden;
 
     const body = await req.json();
@@ -78,6 +85,7 @@ export async function POST(req: NextRequest) {
       frequency: m.frequency,
       duration: m.duration,
       instructions: m.instructions,
+      ...(m.lineFee !== undefined && Number.isFinite(m.lineFee) ? { lineFee: m.lineFee } : {}),
     }));
 
     const visit = await OPVisit.findById(parsed.data.visitId).lean() as { patient?: string; status?: string } | null;
@@ -87,7 +95,7 @@ export async function POST(req: NextRequest) {
     if (String(visit.patient) !== parsed.data.patientId) {
       return NextResponse.json({ message: "Visit does not belong to patient" }, { status: 400 });
     }
-    if (visit.status === "served") {
+    if (visit.status === "served" && userRole !== "frontdesk" && userRole !== "admin") {
       return NextResponse.json({ message: "Visit already served. Prescription is locked." }, { status: 409 });
     }
 
@@ -101,6 +109,7 @@ export async function POST(req: NextRequest) {
           prescribedByRole,
           medicines,
           procedures: parsed.data.procedures ?? [],
+          labTests: parsed.data.labTests ?? [],
           notes: parsed.data.notes ?? "",
           updatedAt: new Date(),
         },
@@ -112,7 +121,16 @@ export async function POST(req: NextRequest) {
       .populate("doctor", "name")
       .populate("medicines.medicine")
       .populate("procedures")
+      .populate("labTests")
       .lean();
+
+    const uniqueLabIds = Array.from(new Set((parsed.data.labTests ?? []).filter(Boolean)));
+    await syncLabBillForVisitItems({
+      patientId: parsed.data.patientId,
+      visitId: parsed.data.visitId,
+      items: uniqueLabIds.map((id) => ({ labTestId: id, quantity: 1 })),
+      sessionUserId: userId,
+    });
 
     return NextResponse.json(prescription);
   } catch (e) {
@@ -122,4 +140,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

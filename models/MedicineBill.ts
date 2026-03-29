@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { clearRegisteredModel } from "@/lib/mongoose-clear-model";
 
 const medicineBillItemSchema = new mongoose.Schema(
   {
@@ -9,6 +10,7 @@ const medicineBillItemSchema = new mongoose.Schema(
     quantity: { type: Number, required: true },
     mrp: { type: Number, required: true },
     sellingPrice: { type: Number, required: true },
+    lineOffer: { type: Number, default: 0 },
     totalPrice: { type: Number, required: true },
   },
   { _id: false }
@@ -20,12 +22,15 @@ const medicineBillSchema = new mongoose.Schema(
     visit: { type: mongoose.Schema.Types.ObjectId, ref: "OPVisit" },
     prescription: { type: mongoose.Schema.Types.ObjectId, ref: "Prescription" },
     items: [medicineBillItemSchema],
+    billOffer: { type: Number, default: 0 },
     grandTotal: { type: Number, required: true },
     billedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     billedAt: { type: Date, default: Date.now },
+    paymentMethod: { type: mongoose.Schema.Types.ObjectId, ref: "PaymentMethod" },
   },
   { timestamps: false }
 );
 
-export default mongoose.models.MedicineBill ||
-  mongoose.model("MedicineBill", medicineBillSchema);
+clearRegisteredModel("MedicineBill");
+
+export default mongoose.model("MedicineBill", medicineBillSchema);

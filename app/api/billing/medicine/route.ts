@@ -2,15 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { dbConnect } from "@/lib/mongoose";
 import { requireAuth, requireRole } from "@/lib/api-auth";
+import "@/models/PaymentMethod";
 import MedicineStock from "@/models/MedicineStock";
 import MedicineBill from "@/models/MedicineBill";
 import OPVisit from "@/models/OPVisit";
 import StockTransaction from "@/models/StockTransaction";
+import { withRouteLog } from "@/lib/with-route-log";
+import { resolvePaymentMethodId } from "@/lib/payment-method";
+import {
+  clampBillOffer,
+  clampLineOffer,
+  grandTotalAfterBillOffer,
+  lineNetAfterOffer,
+} from "@/lib/bill-offers";
 
 const itemSchema = z.object({
   medicineStockId: z.string().min(1),
   quantity: z.number().int().min(1),
   sellingPrice: z.number().min(0),
+  lineOffer: z.coerce.number().min(0).optional(),
 });
 
 const postSchema = z.object({
@@ -18,24 +28,30 @@ const postSchema = z.object({
   visitId: z.string().min(1),
   prescriptionId: z.string().optional(),
   items: z.array(itemSchema).min(1),
+  billOffer: z.coerce.number().min(0).optional(),
+  paymentMethodId: z.string().optional(),
 });
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteLog("billing.medicine.POST", async (req: NextRequest) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
     if (error) return error;
-    const forbidden = requireRole(session!, ["pharmacy", "admin"]);
+    const forbidden = requireRole(session!, ["pharmacy", "admin", "frontdesk"]);
     if (forbidden) return forbidden;
 
     const body = await req.json();
     const parsed = postSchema.safeParse({
       ...body,
-      items: (body.items ?? []).map((i: { medicineStockId: string; quantity: number; sellingPrice: number }) => ({
-        medicineStockId: i.medicineStockId,
-        quantity: typeof i.quantity === "number" ? i.quantity : parseInt(String(i.quantity), 10),
-        sellingPrice: Number(i.sellingPrice),
-      })),
+      items: (body.items ?? []).map(
+        (i: { medicineStockId: string; quantity: number; sellingPrice: number; lineOffer?: number }) => ({
+          medicineStockId: i.medicineStockId,
+          quantity: typeof i.quantity === "number" ? i.quantity : parseInt(String(i.quantity), 10),
+          sellingPrice: Number(i.sellingPrice),
+          lineOffer: typeof i.lineOffer === "number" ? i.lineOffer : undefined,
+        })
+      ),
+      billOffer: typeof body.billOffer === "number" ? body.billOffer : undefined,
     });
     if (!parsed.success) {
       return NextResponse.json({ message: "Validation failed" }, { status: 400 });
@@ -68,6 +84,7 @@ export async function POST(req: NextRequest) {
       quantity: number;
       mrp: number;
       sellingPrice: number;
+      lineOffer: number;
       totalPrice: number;
     }> = [];
     for (const item of parsed.data.items) {
@@ -89,6 +106,8 @@ export async function POST(req: NextRequest) {
         sellingPrice: item.sellingPrice,
         medicineName,
       });
+      const gross = item.sellingPrice * item.quantity;
+      const lineOffer = clampLineOffer(gross, item.lineOffer ?? 0);
       billItems.push({
         medicineStock: item.medicineStockId,
         medicineName,
@@ -97,18 +116,35 @@ export async function POST(req: NextRequest) {
         quantity: item.quantity,
         mrp: stock.mrp,
         sellingPrice: item.sellingPrice,
-        totalPrice: item.sellingPrice * item.quantity,
+        lineOffer,
+        totalPrice: lineNetAfterOffer(gross, lineOffer),
       });
     }
 
-    const grandTotal = billItems.reduce((sum, i) => sum + i.totalPrice, 0);
+    const linesNetSum = billItems.reduce((sum, i) => sum + i.totalPrice, 0);
+    const grandTotal = grandTotalAfterBillOffer(linesNetSum, parsed.data.billOffer ?? 0);
+
+    let paymentMethodRef;
+    try {
+      paymentMethodRef = await resolvePaymentMethodId(parsed.data.paymentMethodId, {
+        required: grandTotal > 0,
+      });
+    } catch (err) {
+      return NextResponse.json(
+        { message: err instanceof Error ? err.message : "Invalid payment method" },
+        { status: 400 }
+      );
+    }
+
     const bill = await MedicineBill.create({
       patient: parsed.data.patientId,
       visit: parsed.data.visitId,
       prescription: parsed.data.prescriptionId || undefined,
       items: billItems,
+      billOffer: clampBillOffer(linesNetSum, parsed.data.billOffer ?? 0),
       grandTotal,
       billedBy: userId,
+      ...(paymentMethodRef ? { paymentMethod: paymentMethodRef } : {}),
     });
 
     for (const item of preparedItems) {
@@ -133,9 +169,14 @@ export async function POST(req: NextRequest) {
     }
     const populated = await MedicineBill.findById(bill._id)
       .populate("patient", "name regNo age gender phone")
-      .populate("visit", "visitDate receiptNo")
+      .populate({
+        path: "visit",
+        select: "visitDate receiptNo",
+        populate: { path: "doctor", select: "name" },
+      })
       .populate("prescription")
       .populate("billedBy", "name")
+      .populate("paymentMethod", "name code")
       .lean();
     return NextResponse.json(populated);
   } catch (e) {
@@ -145,4 +186,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

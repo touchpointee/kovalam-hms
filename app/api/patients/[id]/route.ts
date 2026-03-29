@@ -9,12 +9,16 @@ import OPVisit from "@/models/OPVisit";
 import Prescription from "@/models/Prescription";
 import ProcedureBill from "@/models/ProcedureBill";
 import MedicineBill from "@/models/MedicineBill";
+import "@/models/Medicine";
+import "@/models/Procedure";
+import "@/models/LabTest";
 import mongoose from "mongoose";
+import { withRouteLog } from "@/lib/with-route-log";
 
-export async function GET(
+export const GET = withRouteLog("patients.id.GET", async (
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   try {
     await dbConnect();
     const session = await getServerSession(authOptions);
@@ -30,7 +34,13 @@ export async function GET(
 
     const [visits, prescriptions, procedureBills, medicineBills] = await Promise.all([
       OPVisit.find({ patient: id }).sort({ visitDate: -1 }).lean(),
-      Prescription.find({ patient: id }).populate("visit doctor").populate("medicines.medicine").populate("procedures").sort({ createdAt: -1 }).lean(),
+      Prescription.find({ patient: id })
+        .populate("visit doctor")
+        .populate("medicines.medicine")
+        .populate("procedures")
+        .populate("labTests")
+        .sort({ createdAt: -1 })
+        .lean(),
       ProcedureBill.find({ patient: id }).populate("visit billedBy").populate("items.procedure").sort({ billedAt: -1 }).lean(),
       MedicineBill.find({ patient: id }).populate("visit prescription billedBy").sort({ billedAt: -1 }).lean(),
     ]);
@@ -49,7 +59,7 @@ export async function GET(
       { status: 500 }
     );
   }
-}
+});
 
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
@@ -61,10 +71,10 @@ const updateSchema = z.object({
   bloodGroup: z.enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "Unknown"]).optional(),
 });
 
-export async function PUT(
+export const PUT = withRouteLog("patients.id.PUT", async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
@@ -105,4 +115,4 @@ export async function PUT(
       { status: 500 }
     );
   }
-}
+});

@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "./auth";
 
-const ROLES = ["admin", "doctor", "pharmacy", "frontdesk"] as const;
+const ROLES = ["admin", "doctor", "pharmacy", "frontdesk", "laboratory"] as const;
 export type Role = (typeof ROLES)[number];
 
 export async function requireAuth() {

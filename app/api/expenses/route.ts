@@ -6,10 +6,11 @@ import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import Expense from "@/models/Expense";
 import { parseISO } from "date-fns";
+import { withRouteLog } from "@/lib/with-route-log";
 
 const categories = ["salary", "supplies", "utilities", "maintenance", "misc", "other"] as const;
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteLog("expenses.GET", async (req: NextRequest) => {
   try {
     await dbConnect();
     const session = await getServerSession(authOptions);
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 const postSchema = z.object({
   category: z.enum(categories),
@@ -54,7 +55,7 @@ const postSchema = z.object({
   date: z.string().min(1),
 });
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteLog("expenses.POST", async (req: NextRequest) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
@@ -85,4 +86,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

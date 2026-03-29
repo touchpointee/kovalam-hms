@@ -5,8 +5,9 @@ import { requireAuth, requireRole } from "@/lib/api-auth";
 import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import OPChargeSetting from "@/models/OPChargeSetting";
+import { withRouteLog } from "@/lib/with-route-log";
 
-export async function GET() {
+export const GET = withRouteLog("settings.opCharge.GET", async () => {
   try {
     await dbConnect();
     const session = await getServerSession(authOptions);
@@ -22,11 +23,11 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+});
 
 const postSchema = z.object({ amount: z.number().min(0) });
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteLog("settings.opCharge.POST", async (req: NextRequest) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
@@ -55,4 +56,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

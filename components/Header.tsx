@@ -7,13 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-type Role = "admin" | "doctor" | "pharmacy" | "frontdesk";
+type Role = "admin" | "doctor" | "pharmacy" | "frontdesk" | "laboratory";
 
 const roleBadgeClass: Record<Role, string> = {
   admin: "bg-blue-100 text-blue-800",
   doctor: "bg-red-100 text-red-700",
   pharmacy: "bg-blue-50 text-blue-700",
   frontdesk: "bg-red-50 text-red-700",
+  laboratory: "bg-emerald-100 text-emerald-700",
 };
 
 export function Header({

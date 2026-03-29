@@ -4,6 +4,7 @@ import { dbConnect } from "@/lib/mongoose";
 import { requireAuth, requireRole } from "@/lib/api-auth";
 import Expense from "@/models/Expense";
 import mongoose from "mongoose";
+import { withRouteLog } from "@/lib/with-route-log";
 
 const categories = ["salary", "supplies", "utilities", "maintenance", "misc", "other"] as const;
 
@@ -14,10 +15,10 @@ const putSchema = z.object({
   date: z.string().min(1).optional(),
 });
 
-export async function PUT(
+export const PUT = withRouteLog("expenses.id.PUT", async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
@@ -51,12 +52,12 @@ export async function PUT(
       { status: 500 }
     );
   }
-}
+});
 
-export async function DELETE(
+export const DELETE = withRouteLog("expenses.id.DELETE", async (
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
@@ -78,4 +79,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-}
+});

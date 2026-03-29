@@ -11,7 +11,6 @@ import {
   ClipboardList,
   Users,
   Stethoscope,
-  Pill,
   Package,
   Factory,
   Tags,
@@ -21,49 +20,119 @@ import {
   Receipt,
   Settings,
   BarChart3,
+  FileText,
   LogOut,
   CalendarDays,
+  FlaskConical,
+  UserRound,
+  Wallet,
 } from "lucide-react";
 
-type Role = "admin" | "doctor" | "pharmacy" | "frontdesk";
+type Role = "admin" | "doctor" | "pharmacy" | "frontdesk" | "laboratory";
+
+type NavLinkItem = { href: string; label: string; icon: React.ReactNode };
+
+type NavGroup = {
+  title: string;
+  items: NavLinkItem[];
+};
 
 const hospitalName = process.env.NEXT_PUBLIC_HOSPITAL_NAME ?? "Hospital";
 
-const linksByRole: Record<Role, { href: string; label: string; icon: React.ReactNode }[]> = {
+const groupsByRole: Record<Role, NavGroup[]> = {
   frontdesk: [
-    { href: "/frontdesk/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
-    { href: "/frontdesk/register", label: "Register Patient", icon: <UserPlus className="h-4 w-4" /> },
-    { href: "/frontdesk/visit", label: "New Visit", icon: <ClipboardList className="h-4 w-4" /> },
-    { href: "/frontdesk/procedure-billing", label: "Procedure Billing", icon: <CreditCard className="h-4 w-4" /> },
-    { href: "/frontdesk/expenses", label: "Expenses", icon: <Receipt className="h-4 w-4" /> },
+    {
+      title: "Overview",
+      items: [
+        { href: "/frontdesk/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
+        { href: "/frontdesk/reports", label: "Reports", icon: <BarChart3 className="h-4 w-4" /> },
+      ],
+    },
+    {
+      title: "Patients & visits",
+      items: [
+        { href: "/frontdesk/register", label: "Register Patient", icon: <UserPlus className="h-4 w-4" /> },
+        { href: "/frontdesk/visit", label: "New Visit", icon: <ClipboardList className="h-4 w-4" /> },
+      ],
+    },
+    {
+      title: "Billing & expenses",
+      items: [
+        { href: "/frontdesk/procedure-billing", label: "Procedure Billing", icon: <CreditCard className="h-4 w-4" /> },
+        { href: "/frontdesk/medicine-billing", label: "Medicine Billing", icon: <ShoppingCart className="h-4 w-4" /> },
+        { href: "/frontdesk/lab-billing", label: "Lab Billing", icon: <FlaskConical className="h-4 w-4" /> },
+        { href: "/frontdesk/expenses", label: "Expenses", icon: <Receipt className="h-4 w-4" /> },
+        { href: "/frontdesk/payment-methods", label: "Payment methods", icon: <Wallet className="h-4 w-4" /> },
+      ],
+    },
   ],
   doctor: [
-    { href: "/doctor/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
-    { href: "/doctor/patients", label: "Patients", icon: <Users className="h-4 w-4" /> },
+    {
+      title: "Overview",
+      items: [{ href: "/doctor/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> }],
+    },
+    {
+      title: "Care",
+      items: [{ href: "/doctor/patients", label: "Patients", icon: <Users className="h-4 w-4" /> }],
+    },
   ],
   pharmacy: [
-    { href: "/pharmacy/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
-    { href: "/pharmacy/medicines", label: "Medicines", icon: <Pill className="h-4 w-4" /> },
-    { href: "/pharmacy/medicine-categories", label: "Categories", icon: <Tags className="h-4 w-4" /> },
-    { href: "/pharmacy/manufacturers", label: "Manufacturers", icon: <Factory className="h-4 w-4" /> },
-    { href: "/pharmacy/suppliers", label: "Suppliers", icon: <Truck className="h-4 w-4" /> },
-    { href: "/pharmacy/stock", label: "Stock", icon: <Package className="h-4 w-4" /> },
-    { href: "/pharmacy/billing", label: "Medicine Billing", icon: <ShoppingCart className="h-4 w-4" /> },
+    {
+      title: "Overview",
+      items: [{ href: "/pharmacy/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> }],
+    },
+    {
+      title: "Sales",
+      items: [{ href: "/pharmacy/billing", label: "Medicine Billing", icon: <ShoppingCart className="h-4 w-4" /> }],
+    },
+  ],
+  laboratory: [
+    {
+      title: "Overview",
+      items: [{ href: "/laboratory/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> }],
+    },
   ],
   admin: [
-    { href: "/admin/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
-    { href: "/admin/visits", label: "OP visit", icon: <CalendarDays className="h-4 w-4" /> },
-    { href: "/admin/patients", label: "Patients", icon: <Users className="h-4 w-4" /> },
-    { href: "/admin/procedures", label: "Procedures", icon: <Stethoscope className="h-4 w-4" /> },
-    { href: "/admin/pharmacy/medicines", label: "Medicines", icon: <Pill className="h-4 w-4" /> },
-    { href: "/admin/pharmacy/medicine-categories", label: "Medicine Categories", icon: <Tags className="h-4 w-4" /> },
-    { href: "/admin/pharmacy/manufacturers", label: "Manufacturers", icon: <Factory className="h-4 w-4" /> },
-    { href: "/admin/pharmacy/suppliers", label: "Suppliers", icon: <Truck className="h-4 w-4" /> },
-    { href: "/admin/pharmacy/stock", label: "Stock Management", icon: <Package className="h-4 w-4" /> },
-    { href: "/admin/expenses", label: "Expenses", icon: <Receipt className="h-4 w-4" /> },
-    { href: "/admin/reports", label: "Reports", icon: <BarChart3 className="h-4 w-4" /> },
-    { href: "/admin/settings", label: "Settings", icon: <Settings className="h-4 w-4" /> },
-    { href: "/admin/users", label: "Users", icon: <Users className="h-4 w-4" /> },
+    {
+      title: "Overview",
+      items: [{ href: "/admin/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> }],
+    },
+    {
+      title: "OP & clinical",
+      items: [
+        { href: "/admin/visits", label: "OP visit", icon: <CalendarDays className="h-4 w-4" /> },
+        { href: "/admin/patients", label: "Patients", icon: <Users className="h-4 w-4" /> },
+        { href: "/admin/doctors", label: "Doctors", icon: <UserRound className="h-4 w-4" /> },
+        { href: "/admin/procedures", label: "Procedures", icon: <Stethoscope className="h-4 w-4" /> },
+        { href: "/admin/lab-tests", label: "Lab Tests", icon: <FlaskConical className="h-4 w-4" /> },
+      ],
+    },
+    {
+      title: "Pharmacy",
+      items: [
+        { href: "/admin/pharmacy/medicine-categories", label: "Medicine Categories", icon: <Tags className="h-4 w-4" /> },
+        { href: "/admin/pharmacy/medicine-groups", label: "Medicine Groups", icon: <Tags className="h-4 w-4" /> },
+        { href: "/admin/pharmacy/manufacturers", label: "Manufacturers", icon: <Factory className="h-4 w-4" /> },
+        { href: "/admin/pharmacy/suppliers", label: "Suppliers", icon: <Truck className="h-4 w-4" /> },
+        { href: "/admin/pharmacy/stock", label: "Stock & Medicines", icon: <Package className="h-4 w-4" /> },
+      ],
+    },
+    {
+      title: "Finance & ops",
+      items: [
+        { href: "/admin/expenses", label: "Expenses", icon: <Receipt className="h-4 w-4" /> },
+        { href: "/admin/payment-methods", label: "Payment methods", icon: <Wallet className="h-4 w-4" /> },
+        { href: "/admin/reports", label: "Reports", icon: <BarChart3 className="h-4 w-4" /> },
+      ],
+    },
+    {
+      title: "System",
+      items: [
+        { href: "/admin/logs", label: "Logs", icon: <FileText className="h-4 w-4" /> },
+        { href: "/admin/settings", label: "Settings", icon: <Settings className="h-4 w-4" /> },
+        { href: "/admin/users", label: "Users", icon: <Users className="h-4 w-4" /> },
+      ],
+    },
   ],
 };
 
@@ -77,7 +146,7 @@ export function Sidebar({
   onMobileClose?: () => void;
 }) {
   const pathname = usePathname();
-  const links = linksByRole[role] ?? [];
+  const groups = groupsByRole[role] ?? [];
 
   return (
     <>
@@ -116,25 +185,43 @@ export function Sidebar({
           </div>
         </div>
 
-        <nav className="flex-1 space-y-2 overflow-y-auto px-4 py-6">
-          {links.map(({ href, label, icon }) => {
-            const isActive = pathname === href || pathname.startsWith(href + "/");
+        <nav className="flex-1 overflow-y-auto px-4 py-6" aria-label="Main">
+          {groups.map((group, groupIndex) => {
+            const headingId = `sidebar-nav-${role}-${groupIndex}`;
             return (
-              <Link key={href} href={href} onClick={onMobileClose}>
-                <span
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-all",
-                    isActive
-                      ? "bg-blue-800 text-white shadow-sm"
-                      : "text-slate-700 hover:bg-blue-100/70"
-                  )}
+              <div
+                key={headingId}
+                role="group"
+                aria-labelledby={headingId}
+                className={cn(groupIndex > 0 && "mt-4")}
+              >
+                <p
+                  id={headingId}
+                  className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-slate-500"
                 >
-                  <span className={cn("text-slate-500", isActive && "text-white")}>
-                    {icon}
-                  </span>
-                  {label}
-                </span>
-              </Link>
+                  {group.title}
+                </p>
+                <div className="space-y-2">
+                  {group.items.map(({ href, label, icon }) => {
+                    const isActive = pathname === href || pathname.startsWith(href + "/");
+                    return (
+                      <Link key={href} href={href} onClick={onMobileClose}>
+                        <span
+                          className={cn(
+                            "flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-all",
+                            isActive
+                              ? "bg-blue-800 text-white shadow-sm"
+                              : "text-slate-700 hover:bg-blue-100/70"
+                          )}
+                        >
+                          <span className={cn("text-slate-500", isActive && "text-white")}>{icon}</span>
+                          {label}
+                        </span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </nav>

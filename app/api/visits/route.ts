@@ -7,10 +7,13 @@ import { getServerSession } from "next-auth";
 import OPVisit from "@/models/OPVisit";
 import OPChargeSetting from "@/models/OPChargeSetting";
 import { generateReceiptNo } from "@/lib/counters";
-import { startOfDay, endOfDay, parseISO, subDays } from "date-fns";
+import { startOfDay, endOfDay, parseISO, subDays, parse, isValid } from "date-fns";
 import mongoose from "mongoose";
+import { withRouteLog } from "@/lib/with-route-log";
+import { resolveVisitDoctorId } from "@/lib/visit-doctor";
+import { resolvePaymentMethodId } from "@/lib/payment-method";
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteLog("visits.GET", async (req: NextRequest) => {
   try {
     await dbConnect();
     const session = await getServerSession(authOptions);
@@ -22,6 +25,7 @@ export async function GET(req: NextRequest) {
     const patientId = searchParams.get("patientId");
     const statusParam = searchParams.get("status");
     const includeProcedureBills = searchParams.get("includeProcedureBills") === "true";
+    const includeLabBills = searchParams.get("includeLabBills") === "true";
     const outstandingOp = searchParams.get("outstandingOp");
 
     if (outstandingOp === "true" && patientId) {
@@ -69,38 +73,74 @@ export async function GET(req: NextRequest) {
     }
 
     const visits = await OPVisit.find(filter)
-      .populate("patient", "name regNo age gender phone")
+      .populate("patient", "name regNo age gender phone address")
       .populate("collectedBy", "name")
+      .populate("doctor", "name")
       .sort({ visitDate: -1 })
       .lean();
 
-    if (!includeProcedureBills || visits.length === 0) {
+    if (visits.length === 0) {
+      return NextResponse.json(visits);
+    }
+
+    if (!includeProcedureBills && !includeLabBills) {
       return NextResponse.json(visits);
     }
 
     const visitIds = visits.map((visit) => visit._id);
-    const procedureBills = await import("@/models/ProcedureBill").then(({ default: ProcedureBill }) =>
-      ProcedureBill.find({ visit: { $in: visitIds } }).select("_id visit grandTotal billedAt").lean()
-    );
 
-    const billsByVisit = new Map<string, Array<{ _id: string; grandTotal?: number; billedAt?: Date }>>();
-    for (const bill of procedureBills as Array<{ _id: { toString(): string }; visit?: { toString(): string }; grandTotal?: number; billedAt?: Date }>) {
-      const visitKey = bill.visit?.toString();
-      if (!visitKey) continue;
-      const existing = billsByVisit.get(visitKey) ?? [];
-      existing.push({
-        _id: bill._id.toString(),
-        grandTotal: bill.grandTotal,
-        billedAt: bill.billedAt,
-      });
-      billsByVisit.set(visitKey, existing);
+    const procedureBillsByVisit = new Map<string, Array<{ _id: string; grandTotal?: number; billedAt?: Date }>>();
+    if (includeProcedureBills) {
+      const procedureBills = await import("@/models/ProcedureBill").then(({ default: ProcedureBill }) =>
+        ProcedureBill.find({ visit: { $in: visitIds } }).select("_id visit grandTotal billedAt").lean()
+      );
+      for (const bill of procedureBills as Array<{
+        _id: { toString(): string };
+        visit?: { toString(): string };
+        grandTotal?: number;
+        billedAt?: Date;
+      }>) {
+        const visitKey = bill.visit?.toString();
+        if (!visitKey) continue;
+        const existing = procedureBillsByVisit.get(visitKey) ?? [];
+        existing.push({
+          _id: bill._id.toString(),
+          grandTotal: bill.grandTotal,
+          billedAt: bill.billedAt,
+        });
+        procedureBillsByVisit.set(visitKey, existing);
+      }
+    }
+
+    const labBillByVisit = new Map<string, { _id: string; grandTotal?: number }>();
+    if (includeLabBills) {
+      const LabBill = (await import("@/models/LabBill")).default;
+      const labBills = await LabBill.find({ visit: { $in: visitIds } })
+        .select("_id visit grandTotal")
+        .lean();
+      for (const bill of labBills as Array<{
+        _id: { toString(): string };
+        visit?: { toString(): string };
+        grandTotal?: number;
+      }>) {
+        const visitKey = bill.visit?.toString();
+        if (!visitKey) continue;
+        labBillByVisit.set(visitKey, {
+          _id: bill._id.toString(),
+          grandTotal: bill.grandTotal,
+        });
+      }
     }
 
     return NextResponse.json(
-      visits.map((visit) => ({
-        ...visit,
-        procedureBills: billsByVisit.get(String(visit._id)) ?? [],
-      }))
+      visits.map((visit) => {
+        const id = String(visit._id);
+        return {
+          ...visit,
+          ...(includeProcedureBills ? { procedureBills: procedureBillsByVisit.get(id) ?? [] } : {}),
+          ...(includeLabBills ? { labBill: labBillByVisit.get(id) ?? null } : {}),
+        };
+      })
     );
   } catch (e) {
     console.error(e);
@@ -109,21 +149,53 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 const postSchema = z.object({
   patientId: z.string().min(1),
   paid: z.boolean().optional(),
   /** Mark these existing unpaid OP visits as paid (same patient; payment collected now). */
   settlePendingVisitIds: z.array(z.string()).optional(),
+  /**
+   * Optional visit date (yyyy-MM-dd or ISO). Omit to use current date/time.
+   * OP fee waiver: if any prior OP visit for this patient was within the last 5 days before this visit, charge 0.
+   */
+  visitDate: z.string().optional(),
+  /**
+   * When set (e.g. by frontdesk), stored as this visit's OP charge instead of deriving from settings + 5-day waiver.
+   */
+  opCharge: z.number().min(0).optional(),
+  /** Optional consulting doctor (User id, role doctor). */
+  doctorId: z.string().optional(),
+  /** Required when this registration collects OP money (new visit and/or pending settlements). */
+  paymentMethodId: z.string().optional(),
 });
+
+function resolveVisitDateForCreate(input: string | undefined): Date {
+  if (!input?.trim()) {
+    return new Date();
+  }
+  const trimmed = input.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const d = parse(trimmed, "yyyy-MM-dd", new Date());
+    if (!isValid(d)) {
+      throw new Error("Invalid visitDate");
+    }
+    return startOfDay(d);
+  }
+  const d = parseISO(trimmed);
+  if (!isValid(d)) {
+    throw new Error("Invalid visitDate");
+  }
+  return d;
+}
 
 const patchSchema = z.object({
   visitId: z.string().min(1),
   status: z.enum(["waiting", "served"]),
 });
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteLog("visits.POST", async (req: NextRequest) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
@@ -137,31 +209,86 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "Validation failed" }, { status: 400 });
     }
 
+    let visitDate: Date;
+    try {
+      visitDate = resolveVisitDateForCreate(parsed.data.visitDate);
+    } catch {
+      return NextResponse.json({ message: "Invalid visitDate" }, { status: 400 });
+    }
+    if (visitDate.getTime() > Date.now()) {
+      return NextResponse.json({ message: "Visit date cannot be in the future" }, { status: 400 });
+    }
+
     const setting = await OPChargeSetting.findOne().sort({ updatedAt: -1 }).lean() as { amount?: number } | null;
     const baseOpCharge = setting?.amount ?? 0;
 
-    const fiveDaysAgo = subDays(new Date(), 5);
-    const latestServed = await OPVisit.findOne({
+    const fiveDaysAgo = subDays(visitDate, 5);
+    const priorVisit = await OPVisit.findOne({
       patient: parsed.data.patientId,
-      status: "served",
+      visitDate: { $lt: visitDate },
     })
       .sort({ visitDate: -1 })
       .lean() as { visitDate?: Date } | null;
 
-    const hasRecentServedVisit =
-      latestServed?.visitDate != null && new Date(latestServed.visitDate) >= fiveDaysAgo;
-    const opCharge = hasRecentServedVisit ? 0 : baseOpCharge;
+    const hasRecentOpVisit =
+      priorVisit?.visitDate != null && new Date(priorVisit.visitDate) >= fiveDaysAgo;
+    const derivedOpCharge = hasRecentOpVisit ? 0 : baseOpCharge;
+    const opCharge =
+      parsed.data.opCharge !== undefined ? Math.max(0, Number(parsed.data.opCharge) || 0) : derivedOpCharge;
 
     const receiptNo = await generateReceiptNo();
     const userId = (session!.user as { id?: string }).id;
 
+    let doctorRef: mongoose.Types.ObjectId | undefined;
+    try {
+      doctorRef = await resolveVisitDoctorId(parsed.data.doctorId);
+    } catch (err) {
+      return NextResponse.json(
+        { message: err instanceof Error ? err.message : "Invalid doctor" },
+        { status: 400 }
+      );
+    }
+
+    const settleIds = parsed.data.settlePendingVisitIds?.filter((id) => mongoose.Types.ObjectId.isValid(id)) ?? [];
+    const toSettle =
+      settleIds.length > 0
+        ? await OPVisit.find({
+            _id: { $in: settleIds },
+            patient: parsed.data.patientId,
+            paid: { $ne: true },
+          }).lean()
+        : [];
+
+    const totalPendingSettledPreview = toSettle.reduce(
+      (s, row) => s + (Number(row.opCharge) || 0),
+      0
+    );
+    const paidForNew = parsed.data.paid ?? false;
+    const newVisitCollection = paidForNew ? opCharge : 0;
+    const needPaymentMethod = newVisitCollection > 0 || totalPendingSettledPreview > 0;
+
+    let paymentMethodRef: mongoose.Types.ObjectId | undefined;
+    try {
+      paymentMethodRef = await resolvePaymentMethodId(parsed.data.paymentMethodId, {
+        required: needPaymentMethod,
+      });
+    } catch (err) {
+      return NextResponse.json(
+        { message: err instanceof Error ? err.message : "Invalid payment method" },
+        { status: 400 }
+      );
+    }
+
     const visit = await OPVisit.create({
       patient: parsed.data.patientId,
+      ...(doctorRef ? { doctor: doctorRef } : {}),
+      visitDate,
       status: "waiting",
       opCharge,
       paid: parsed.data.paid ?? false,
       receiptNo,
       collectedBy: userId,
+      ...(paymentMethodRef ? { paymentMethod: paymentMethodRef } : {}),
     });
 
     let settlement:
@@ -176,14 +303,7 @@ export async function POST(req: NextRequest) {
         }
       | undefined;
 
-    const settleIds = parsed.data.settlePendingVisitIds?.filter((id) => mongoose.Types.ObjectId.isValid(id)) ?? [];
-    if (settleIds.length > 0) {
-      const toSettle = await OPVisit.find({
-        _id: { $in: settleIds },
-        patient: parsed.data.patientId,
-        paid: { $ne: true },
-      }).lean();
-
+    if (toSettle.length > 0) {
       const settledVisits: Array<{ _id: string; receiptNo: string; visitDate: Date; opCharge: number }> = [];
       for (const row of toSettle) {
         await OPVisit.updateOne({ _id: row._id }, { $set: { paid: true } });
@@ -211,8 +331,10 @@ export async function POST(req: NextRequest) {
     }
 
     const finalPopulated = await OPVisit.findById(visit._id)
-      .populate("patient", "name regNo age gender phone")
+      .populate("patient", "name regNo age gender phone address")
       .populate("collectedBy", "name")
+      .populate("doctor", "name")
+      .populate("paymentMethod", "name code")
       .lean();
 
     return NextResponse.json({
@@ -226,9 +348,9 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
-export async function PATCH(req: NextRequest) {
+export const PATCH = withRouteLog("visits.PATCH", async (req: NextRequest) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
@@ -247,8 +369,9 @@ export async function PATCH(req: NextRequest) {
       { $set: { status: parsed.data.status } },
       { new: true }
     )
-      .populate("patient", "name regNo age gender phone")
+      .populate("patient", "name regNo age gender phone address")
       .populate("collectedBy", "name")
+      .populate("doctor", "name")
       .lean();
 
     if (!updated) {
@@ -263,4 +386,4 @@ export async function PATCH(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

@@ -3,12 +3,15 @@ import mongoose from "mongoose";
 const opVisitSchema = new mongoose.Schema(
   {
     patient: { type: mongoose.Schema.Types.ObjectId, ref: "Patient", required: true },
+    /** Consulting doctor (User with role doctor); optional for legacy visits. */
+    doctor: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     visitDate: { type: Date, default: Date.now },
     status: { type: String, enum: ["waiting", "served"], default: "waiting" },
     opCharge: { type: Number, required: true },
     paid: { type: Boolean, default: false },
     receiptNo: { type: String, required: true, unique: true },
     collectedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    paymentMethod: { type: mongoose.Schema.Types.ObjectId, ref: "PaymentMethod" },
     createdAt: { type: Date, default: Date.now },
     /** Sum of prior-visit OP collected during this registration (for receipt reprint). */
     priorSettlementTotal: { type: Number, default: 0 },
@@ -26,5 +29,10 @@ const opVisitSchema = new mongoose.Schema(
   },
   { timestamps: false }
 );
+
+// Next.js dev reuses mongoose.models across HMR; stale schema causes StrictPopulateError on `doctor`.
+if (process.env.NODE_ENV === "development" && mongoose.models.OPVisit) {
+  delete mongoose.models.OPVisit;
+}
 
 export default mongoose.models.OPVisit || mongoose.model("OPVisit", opVisitSchema);

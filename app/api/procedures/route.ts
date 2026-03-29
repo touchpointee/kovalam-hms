@@ -5,8 +5,9 @@ import { requireAuth, requireRole } from "@/lib/api-auth";
 import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import Procedure from "@/models/Procedure";
+import { withRouteLog } from "@/lib/with-route-log";
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteLog("procedures.GET", async (req: NextRequest) => {
   try {
     await dbConnect();
     const session = await getServerSession(authOptions);
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 const postSchema = z.object({
   name: z.string().min(1),
@@ -32,7 +33,7 @@ const postSchema = z.object({
   price: z.number().min(0),
 });
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteLog("procedures.POST", async (req: NextRequest) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
@@ -54,4 +55,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

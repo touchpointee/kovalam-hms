@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 
-type Role = "admin" | "doctor" | "pharmacy" | "frontdesk";
+type Role = "admin" | "doctor" | "pharmacy" | "frontdesk" | "laboratory";
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
@@ -28,7 +28,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     return null;
   }
   return (
-    <div className="min-h-screen bg-blue-50/40">
+    <div className="dashboard-shell-root min-h-screen bg-blue-50/40">
       <div className="flex min-h-screen overflow-hidden">
         <Sidebar
           role={role}

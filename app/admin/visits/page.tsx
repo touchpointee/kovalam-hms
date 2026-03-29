@@ -27,6 +27,7 @@ type VisitRow = {
   opCharge?: number;
   paid?: boolean;
   patient?: PatientRef;
+  doctor?: { name?: string } | null;
 };
 
 function todayYmd() {
@@ -109,6 +110,7 @@ export default function AdminTodayVisitsPage() {
                 <TableRow>
                   <TableHead>Time</TableHead>
                   <TableHead>Patient</TableHead>
+                  <TableHead>Doctor</TableHead>
                   <TableHead>Reg No</TableHead>
                   <TableHead>Receipt</TableHead>
                   <TableHead>OP fee</TableHead>
@@ -127,6 +129,9 @@ export default function AdminTodayVisitsPage() {
                         {format(new Date(v.visitDate), "HH:mm")}
                       </TableCell>
                       <TableCell className="font-medium">{p?.name ?? "-"}</TableCell>
+                      <TableCell className="max-w-[10rem] truncate text-muted-foreground">
+                        {(v.doctor as { name?: string } | undefined)?.name ?? "—"}
+                      </TableCell>
                       <TableCell>{p?.regNo ?? "-"}</TableCell>
                       <TableCell>{v.receiptNo ?? "-"}</TableCell>
                       <TableCell>{formatCurrency(v.opCharge ?? 0)}</TableCell>

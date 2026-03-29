@@ -17,8 +17,8 @@ npm install
 Create a `.env` file in the root with the following:
 
 ```env
-MONGODB_URI=mongodb+srv://nithulps:nithul123@cluster0.t55o5tr.mongodb.net/hms?retryWrites=true&w=majority&appName=Cluster0
-NEXTAUTH_SECRET=3RMTzIHKJLhA/LhwaR/vBHTVQ+fYSdvrWC05cmqI/fQ=
+MONGODB_URI=your_mongodb_connection_string
+NEXTAUTH_SECRET=your_nextauth_secret
 NEXTAUTH_URL=http://localhost:3000
 NEXT_PUBLIC_HOSPITAL_NAME=Doctors medical center
 NEXT_PUBLIC_HOSPITAL_ADDRESS=123 Main Street, City - 000001
@@ -30,7 +30,7 @@ NEXT_PUBLIC_HOSPITAL_PHONE=+91 00000 00000
 Run the seed script to populate MongoDB with default users, patients, medicines, and procedures:
 
 ```bash
-$env:MONGODB_URI="mongodb+srv://nithulps:nithul123@cluster0.t55o5tr.mongodb.net/hms?retryWrites=true&w=majority&appName=Cluster0"; npx ts-node --project tsconfig.seed.json scripts/seed.ts
+npx ts-node --project tsconfig.seed.json scripts/seed.ts
 ```
 
 ### 4. Run the Development Server
@@ -53,6 +53,7 @@ All accounts use the same default password: **`password123`**
 | Doctor     | `doctor@hms.com`    | `password123` |
 | Pharmacy   | `pharmacy@hms.com`  | `password123` |
 | Front Desk | `frontdesk@hms.com` | `password123` |
+| Laboratory | `laboratory@hms.com` | `password123` |
 
 > ⚠️ Change these credentials before deploying to production.
 
@@ -75,6 +76,7 @@ All accounts use the same default password: **`password123`**
 | `doctor`    | Dashboard, Patient Consultations, Prescriptions                 |
 | `pharmacy`  | Dashboard, Medicines, Stock, Billing                            |
 | `frontdesk` | Dashboard, Patient Registration, Visits, Billing                |
+| `laboratory` | Dashboard, Laboratory Bills                                    |
 
 ---
 

@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
+import { Trash2 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,6 +87,19 @@ export default function AdminPatientDetailPage() {
   const [vPaid, setVPaid] = useState(false);
   const [vStatus, setVStatus] = useState<"waiting" | "served">("waiting");
   const [savingVisit, setSavingVisit] = useState(false);
+  const [deletingVisitId, setDeletingVisitId] = useState<string | null>(null);
+  const visitDateInputRef = useRef<HTMLInputElement>(null);
+  const visitSaveInFlightRef = useRef(false);
+
+  const openVisitDatetimePicker = useCallback(() => {
+    const el = visitDateInputRef.current;
+    if (!el) return;
+    try {
+      el.showPicker?.();
+    } catch {
+      el.focus();
+    }
+  }, []);
 
   const loadPatient = useCallback(async () => {
     if (!id) return;
@@ -154,8 +168,35 @@ export default function AdminPatientDetailPage() {
     setVisitDialogOpen(true);
   };
 
+  const deleteVisit = async (visitId: string) => {
+    if (
+      !window.confirm(
+        "Delete this visit? Prescriptions, procedure bills, medicine bills, and lab bills linked to this visit will be removed. This cannot be undone."
+      )
+    ) {
+      return;
+    }
+    setDeletingVisitId(visitId);
+    try {
+      const res = await fetch(`/api/visits/${visitId}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { message?: string }).message ?? "Failed to delete visit");
+      if (editingVisit?._id === visitId) {
+        setVisitDialogOpen(false);
+        setEditingVisit(null);
+      }
+      toast.success("Visit deleted");
+      await loadPatient();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete visit");
+    } finally {
+      setDeletingVisitId(null);
+    }
+  };
+
   const saveVisit = async () => {
-    if (!editingVisit?._id) return;
+    if (!editingVisit?._id || visitSaveInFlightRef.current) return;
+    visitSaveInFlightRef.current = true;
     setSavingVisit(true);
     try {
       const res = await fetch(`/api/visits/${editingVisit._id}`, {
@@ -171,13 +212,14 @@ export default function AdminPatientDetailPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? "Save failed");
-      await loadPatient();
       setVisitDialogOpen(false);
       setEditingVisit(null);
       toast.success("Visit updated");
+      void loadPatient();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
+      visitSaveInFlightRef.current = false;
       setSavingVisit(false);
     }
   };
@@ -330,6 +372,17 @@ export default function AdminPatientDetailPage() {
                             Consultation
                           </Link>
                         </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                          disabled={deletingVisitId === v._id}
+                          onClick={() => void deleteVisit(v._id)}
+                        >
+                          <Trash2 className="mr-1 h-3.5 w-3.5" aria-hidden />
+                          {deletingVisitId === v._id ? "Deleting…" : "Delete"}
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -340,15 +393,33 @@ export default function AdminPatientDetailPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={visitDialogOpen} onOpenChange={setVisitDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog
+        open={visitDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && savingVisit) return;
+          setVisitDialogOpen(open);
+        }}
+      >
+        <DialogContent
+          className="sm:max-w-md"
+          onPointerDownOutside={(e) => savingVisit && e.preventDefault()}
+          onEscapeKeyDown={(e) => savingVisit && e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Edit visit</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 py-2">
             <div className="space-y-2">
               <Label htmlFor="vDate">Visit date & time</Label>
-              <Input id="vDate" type="datetime-local" value={vDate} onChange={(e) => setVDate(e.target.value)} />
+              <Input
+                ref={visitDateInputRef}
+                id="vDate"
+                type="datetime-local"
+                value={vDate}
+                onChange={(e) => setVDate(e.target.value)}
+                onClick={openVisitDatetimePicker}
+                className="cursor-pointer"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="vReceipt">Receipt no.</Label>
@@ -388,10 +459,15 @@ export default function AdminPatientDetailPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setVisitDialogOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={savingVisit}
+              onClick={() => setVisitDialogOpen(false)}
+            >
               Cancel
             </Button>
-            <Button type="button" onClick={saveVisit} disabled={savingVisit}>
+            <Button type="button" onClick={() => void saveVisit()} disabled={savingVisit}>
               {savingVisit ? "Saving…" : "Save visit"}
             </Button>
           </DialogFooter>

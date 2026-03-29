@@ -5,6 +5,7 @@ import { requireAuth, requireRole } from "@/lib/api-auth";
 import MedicineStock from "@/models/MedicineStock";
 import StockTransaction from "@/models/StockTransaction";
 import mongoose from "mongoose";
+import { withRouteLog } from "@/lib/with-route-log";
 
 const putSchema = z.object({
   transactionType: z.enum(["in", "out", "adjustment"]),
@@ -13,10 +14,10 @@ const putSchema = z.object({
   referenceNumber: z.string().optional(),
 });
 
-export async function PUT(
+export const PUT = withRouteLog("stock.id.PUT", async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
@@ -83,4 +84,4 @@ export async function PUT(
       { status: 500 }
     );
   }
-}
+});

@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CreditCard, Users, FileText } from "lucide-react";
+import { CreditCard, Users, FileText, BarChart3 } from "lucide-react";
 
 type Visit = {
   _id: string;
@@ -120,6 +120,18 @@ export default function FrontdeskDashboardPage() {
           <CardContent>
             <p className="text-2xl font-semibold">{procedureBillsToday}</p>
             <p className="mt-1 text-xs text-muted-foreground">Saved for today&apos;s served visits</p>
+          </CardContent>
+        </Card>
+        <Card className="rounded-2xl border-blue-100 bg-gradient-to-br from-white to-blue-50/80 shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between pb-1">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Reports</CardTitle>
+            <BarChart3 className="h-4 w-4 text-blue-700" />
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-sm text-muted-foreground">OP, procedure, medicine revenue and expenses by date range.</p>
+            <Button asChild size="sm" className="bg-blue-800 hover:bg-blue-900">
+              <Link href="/frontdesk/reports">Open reports</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>

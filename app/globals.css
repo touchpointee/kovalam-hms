@@ -160,6 +160,12 @@
   }
 }
 
+@media not print {
+  .report-print-only {
+    display: none !important;
+  }
+}
+
 @media print {
   body {
     print-color-adjust: exact;
@@ -170,30 +176,118 @@
     display: none !important;
   }
 
+  .report-print-only {
+    display: block !important;
+  }
+
   .print\:hidden {
     display: none !important;
   }
 
   nav,
   aside,
+  header,
   header .no-print,
   button {
     display: none !important;
+  }
+
+  /* Full-width report area; remove shell chrome padding when printing */
+  .dashboard-shell-root main {
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  .dashboard-shell-root main .dashboard-content {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
   }
 
   .print-only {
     display: block !important;
   }
 
+  /* Default: A4 for reports and general printing (e.g. financial-report-print) */
   @page {
-    margin: 10mm 0;
+    margin: 12mm;
     size: A4;
+  }
+
+  /* Bills: A4 landscape; `page: bill` is set on #report-content only */
+  @page bill {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+
+  html {
+    position: relative;
+  }
+
+  html,
+  body {
+    height: auto !important;
+    min-height: 0 !important;
   }
 
   body {
     font-size: 12px;
     color: #000;
     background: #fff;
+  }
+
+  /* Invisible shell still reserves min-h-screen → blank print pages before/after the bill */
+  .dashboard-shell-root,
+  .dashboard-shell-root > .flex,
+  .dashboard-shell-root > .flex.min-h-screen,
+  .dashboard-shell-root .flex.min-h-screen,
+  .dashboard-shell-root .flex.min-w-0.flex-1,
+  .dashboard-shell-root main,
+  .dashboard-shell-root .dashboard-content {
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* flex-1 on main fills the viewport while hidden → extra blank sheets */
+  .dashboard-shell-root main {
+    flex: 0 0 auto !important;
+  }
+
+  /* Sidebar gutter (md:pl-64) still applies in print → huge left offset & page breaks */
+  .dashboard-shell-root > .flex > .flex.min-w-0.flex-1.flex-col,
+  .dashboard-shell-root .flex.min-w-0.flex-1.flex-col {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    display: block !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  .dashboard-shell-root > .flex.min-h-screen {
+    display: block !important;
+    min-height: 0 !important;
+    height: auto !important;
+  }
+
+  /*
+   * Letterhead bills (PrintLayout): visibility:hidden ancestors still reserve flex/min-h-screen space
+   * → blank pages. Pull bill out of flow. Financial reports use .print-container without .bill-print-root.
+   */
+  .print-container.bill-print-root {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    z-index: 2147483645 !important;
   }
 
   .print-container {
@@ -217,19 +311,69 @@
   body * {
     visibility: hidden;
   }
+  .print-container,
   #report-content,
   #report-content * {
-    visibility: visible;
+    visibility: visible !important;
   }
-  #report-content {
-    position: absolute;
-    left: 0;
-    top: 0;
+
+  /* Financial reports (admin / front desk): not using #report-content; must override body * hide */
+  .financial-report-print,
+  .financial-report-print * {
+    visibility: visible !important;
+  }
+
+  .financial-report-print {
+    position: relative;
+    z-index: 1;
     width: 100%;
+    max-width: 100%;
+    padding: 0 2mm;
+    box-sizing: border-box;
+    color: #111827;
+  }
+
+  .financial-report-print .report-table-wrap {
+    overflow: visible !important;
+  }
+
+  .financial-report-print table {
+    font-size: 10px;
+  }
+
+  .financial-report-print th,
+  .financial-report-print td {
+    padding: 3px 6px !important;
+    word-break: break-word;
+  }
+
+  .financial-report-print .report-section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .financial-report-print .report-section--table {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .financial-report-print .report-section--table table {
+    break-inside: auto;
+  }
+
+  .financial-report-print .report-section--table tr {
+    break-inside: avoid;
+    page-break-after: auto;
   }
   #report-content {
+    position: relative;
+    left: auto;
+    top: auto;
+    width: 100%;
     max-width: 100% !important;
-    min-height: calc(297mm - 20mm) !important;
+    page: bill;
+    min-height: 0 !important;
+    height: auto !important;
     border: none !important;
     box-shadow: none !important;
     overflow: visible !important;
@@ -238,39 +382,52 @@
     padding-bottom: 0 !important;
     padding-left: 0 !important;
     padding-right: 0 !important;
+    /* Keep header + body + footer on one sheet when content fits (stops “Net amount” alone on page 3) */
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
+
+  #report-content table,
+  #report-content th,
+  #report-content td {
+    font-size: 11px;
+    padding: 3px 6px;
+  }
+
+  /* Normal flow: fixed header/footer repeat on every printed page and caused an empty page 2 */
   .print-letterhead-header {
-    position: fixed !important;
-    top: 10mm;
-    left: 0;
-    right: 0;
-    z-index: 20 !important;
+    position: static !important;
+    top: auto;
+    left: auto;
+    right: auto;
+    z-index: 1 !important;
     visibility: visible !important;
     padding-top: 0 !important;
-    background: #fff;
-    padding-left: 12mm !important;
-    padding-right: 12mm !important;
+    background: transparent;
+    padding-left: 8mm !important;
+    padding-right: 8mm !important;
     max-width: none !important;
   }
   .print-letterhead-footer {
-    position: fixed !important;
-    bottom: 10mm;
-    left: 0;
-    right: 0;
-    z-index: 20 !important;
+    position: static !important;
+    bottom: auto;
+    left: auto;
+    right: auto;
+    z-index: 1 !important;
     visibility: visible !important;
     padding-bottom: 0 !important;
-    background: #fff;
-    padding-left: 12mm !important;
-    padding-right: 12mm !important;
+    margin-top: 10px !important;
+    background: transparent;
+    padding-left: 8mm !important;
+    padding-right: 8mm !important;
     max-width: none !important;
   }
   .print-letterhead-body {
-    margin-top: 170px !important;
-    margin-bottom: 120px !important;
+    margin-top: 10px !important;
+    margin-bottom: 0 !important;
     max-width: none !important;
-    padding-left: 12mm !important;
-    padding-right: 12mm !important;
+    padding-left: 8mm !important;
+    padding-right: 8mm !important;
   }
   .print-letterhead-footer-inner,
   .print-letterhead-header {
@@ -286,8 +443,9 @@
     border: 1px solid #e5e7eb !important;
     page-break-inside: avoid;
   }
+  /* Global row avoid + short bills caused extra blank pages in Chromium print */
   tr {
-    page-break-inside: avoid;
+    page-break-inside: auto !important;
     page-break-after: auto;
   }
   thead {

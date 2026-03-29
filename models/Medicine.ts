@@ -5,6 +5,7 @@ const medicineSchema = new mongoose.Schema(
     name: { type: String, required: true },
     genericName: { type: String },
     category: { type: String },
+    group: { type: String },
     manufacturer: { type: String },
     unit: { type: String },
     minQuantity: { type: Number, default: 10 },

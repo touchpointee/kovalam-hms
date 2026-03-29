@@ -5,12 +5,13 @@ import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { requireAuth, requireRole } from "@/lib/api-auth";
 import Supplier from "@/models/Supplier";
+import { withRouteLog } from "@/lib/with-route-log";
 
 const schema = z.object({
   name: z.string().min(1),
 });
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteLog("suppliers.GET", async (req: NextRequest) => {
   try {
     await dbConnect();
     const session = await getServerSession(authOptions);
@@ -35,9 +36,9 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteLog("suppliers.POST", async (req: NextRequest) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
@@ -66,4 +67,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

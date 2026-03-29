@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import Patient from "@/models/Patient";
 import { generateRegNo } from "@/lib/counters";
+import { withRouteLog } from "@/lib/with-route-log";
 
 const createSchema = z.object({
   name: z.string().min(1),
@@ -18,7 +19,7 @@ const createSchema = z.object({
     .optional(),
 });
 
-export async function GET(req: NextRequest) {
+export const GET = withRouteLog("patients.GET", async (req: NextRequest) => {
   try {
     await dbConnect();
     const session = await getServerSession(authOptions);
@@ -60,9 +61,9 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withRouteLog("patients.POST", async (req: NextRequest) => {
   try {
     await dbConnect();
     const { session, error } = await requireAuth();
@@ -89,4 +90,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
