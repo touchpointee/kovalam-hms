@@ -22,6 +22,7 @@ const labBillSchema = new mongoose.Schema(
     /** Extra amount off the bill after line offers (currency). */
     billOffer: { type: Number, default: 0 },
     grandTotal: { type: Number, required: true },
+    generatedByName: { type: String, trim: true },
     billedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     billedAt: { type: Date, default: Date.now },
     paymentMethod: { type: mongoose.Schema.Types.ObjectId, ref: "PaymentMethod" },

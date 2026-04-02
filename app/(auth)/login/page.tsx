@@ -8,7 +8,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import { ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,10 +34,10 @@ const roleDashboard: Record<string, string> = {
 export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const {
     register,
     handleSubmit,
-    setValue,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -48,46 +48,6 @@ export default function LoginPage() {
   useEffect(() => {
     fetch("/api/db-warmup").catch(() => {});
   }, []);
-
-  const testCredentials = [
-    { label: "Admin", email: "admin@hms.com", password: "password123" },
-    { label: "Doctor", email: "doctor@hms.com", password: "password123" },
-  { label: "Pharmacist", email: "pharmacy@hms.com", password: "password123" },
-    { label: "Front Desk", email: "frontdesk@hms.com", password: "password123" },
-    { label: "Laboratory", email: "laboratory@hms.com", password: "password123" },
-  ] as const;
-
-  function fillAndSubmit(email: string, password: string) {
-    setValue("email", email);
-    setValue("password", password);
-    setLoading(true);
-    signIn("credentials", { email, password, redirect: false })
-      .then((res) => {
-        if (res?.error) {
-          toast.error(res.error ?? "Invalid credentials");
-          setLoading(false);
-          return;
-        }
-        return fetch("/api/auth/session").then((r) => r.json());
-      })
-      .then((session) => {
-        if (!session?.user?.role) return;
-        const path = roleDashboard[session.user.role];
-        toast.success("Logged in successfully");
-        router.push(path);
-        router.refresh();
-      })
-      .catch((err) => {
-        setLoading(false);
-        const msg = err?.message || (typeof err === "string" ? err : "");
-        if (msg.includes("fetch") || msg.includes("Failed to fetch") || msg.includes("Connection")) {
-          toast.error("Server unreachable. Is the dev server running? Try: npm run dev");
-        } else {
-          toast.error(msg || "Something went wrong");
-        }
-      })
-      .finally(() => setLoading(false));
-  }
 
   async function onSubmit(data: FormData) {
     setLoading(true);
@@ -159,34 +119,27 @@ export default function LoginPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                {...register("password")}
-                className={errors.password ? "border-destructive focus-visible:ring-destructive" : ""}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  {...register("password")}
+                  className={`pr-11 ${errors.password ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-slate-500 hover:text-slate-700"
+                  onClick={() => setShowPassword((value) => !value)}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               {errors.password && <p className="text-destructive text-sm">{errors.password.message}</p>}
             </div>
             <Button type="submit" className="h-10 w-full" disabled={loading}>
               {loading ? "Signing in..." : "Sign in"}
             </Button>
-            <div className="rounded-lg border bg-muted/40 p-3">
-              <p className="text-center text-xs font-medium text-muted-foreground">Quick test login</p>
-              <div className="mt-2 flex flex-wrap justify-center gap-2">
-                {testCredentials.map(({ label, email, password }) => (
-                  <Button
-                    key={email}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={loading}
-                    onClick={() => fillAndSubmit(email, password)}
-                  >
-                    {label}
-                  </Button>
-                ))}
-              </div>
-            </div>
           </form>
         </CardContent>
       </Card>

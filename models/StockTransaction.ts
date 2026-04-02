@@ -4,6 +4,8 @@ const stockTransactionSchema = new mongoose.Schema(
   {
     medicineStock: { type: mongoose.Schema.Types.ObjectId, ref: "MedicineStock", required: true },
     medicine: { type: mongoose.Schema.Types.ObjectId, ref: "Medicine", required: true },
+    inventoryType: { type: String, enum: ["store", "pharmacy"], default: "store" },
+    relatedStock: { type: mongoose.Schema.Types.ObjectId, ref: "MedicineStock", default: null },
     transactionType: {
       type: String,
       enum: ["in", "out", "adjustment"],

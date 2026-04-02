@@ -71,6 +71,7 @@ type ManufacturerOption = { _id: string; name: string };
 export default function PharmacyStockPage() {
   const router = useRouter();
   const pharmacyBase = usePharmacyBase();
+  const isAdminView = pharmacyBase.startsWith("/admin");
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [batchesByMedicine, setBatchesByMedicine] = useState<Record<string, StockBatch[]>>({});
   const [search, setSearch] = useState("");
@@ -103,7 +104,7 @@ export default function PharmacyStockPage() {
 
       const stockRows = await Promise.all(
         rows.map(async (medicine) => {
-          const params = new URLSearchParams({ medicineId: medicine._id });
+          const params = new URLSearchParams({ medicineId: medicine._id, inventoryType: "pharmacy" });
           const res = await fetch(`/api/stock?${params}`, { cache: "no-store" });
           const data = await res.json();
           return [medicine._id, Array.isArray(data) ? (data as StockBatch[]) : []] as const;
@@ -294,9 +295,9 @@ export default function PharmacyStockPage() {
       <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-semibold text-slate-800">Medicine Stock</h1>
+            <h1 className="text-3xl font-semibold text-slate-800">Pharmacy Stock Management</h1>
             <p className="text-sm text-slate-500">
-              Add and edit medicines, then open a row to manage batches and stock transactions.
+              Manage pharmacy-side stock. Medicines billed to patients are deducted from this inventory.
             </p>
           </div>
         </div>
@@ -311,6 +312,11 @@ export default function PharmacyStockPage() {
               className="pl-9"
             />
           </div>
+          {isAdminView ? (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`${pharmacyBase}/store-stock`}>Store Stock</Link>
+            </Button>
+          ) : null}
           <Button asChild variant="outline" size="sm">
             <Link href={`${pharmacyBase}/medicine-categories`}>Categories</Link>
           </Button>
@@ -398,7 +404,7 @@ export default function PharmacyStockPage() {
                       <TableCell className="text-right">
                         <div className="flex flex-wrap justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                           <Button variant="ghost" size="sm" className="gap-1 text-teal-700" onClick={() => goBatches(medicine._id)}>
-                            Batches
+                            Pharmacy Batches
                             <ChevronRight className="h-4 w-4" />
                           </Button>
                           <Button variant="ghost" size="sm" onClick={() => openEdit(medicine)}>

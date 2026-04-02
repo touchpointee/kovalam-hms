@@ -1,3 +1,7 @@
 "use client";
 
-export { default } from "@/app/pharmacy/stock/page";
+import PharmacyStockPage from "@/app/pharmacy/stock/page";
+
+export default function AdminPharmacyStockPage() {
+  return <PharmacyStockPage />;
+}

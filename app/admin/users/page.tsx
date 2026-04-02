@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,8 +55,16 @@ export default function AdminUsersPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
   const [form, setForm] = useState({ name: "", email: "", password: "", role: "frontdesk" as string });
-  const [editForm, setEditForm] = useState({ name: "", role: "" as string, isActive: true, newPassword: "" });
+  const [editForm, setEditForm] = useState({
+    name: "",
+    email: "",
+    role: "" as string,
+    isActive: true,
+    newPassword: "",
+  });
   const [saving, setSaving] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showEditPassword, setShowEditPassword] = useState(false);
 
   const load = () => {
     fetch("/api/users")
@@ -72,12 +81,14 @@ export default function AdminUsersPage() {
   const openAdd = () => {
     setEditing(null);
     setForm({ name: "", email: "", password: "", role: "frontdesk" });
+    setShowNewPassword(false);
     setOpen(true);
   };
 
   const openEdit = (u: User) => {
     setEditing(u);
-    setEditForm({ name: u.name, role: u.role, isActive: u.isActive, newPassword: "" });
+    setEditForm({ name: u.name, email: u.email, role: u.role, isActive: u.isActive, newPassword: "" });
+    setShowEditPassword(false);
     setOpen(true);
   };
 
@@ -107,10 +118,19 @@ export default function AdminUsersPage() {
 
   const saveEdit = async () => {
     if (!editing) return;
+    if (!editForm.name.trim() || !editForm.email.trim()) {
+      toast.error("Name and email are required");
+      return;
+    }
+    if (editForm.newPassword && editForm.newPassword.length < 6) {
+      toast.error("New password must be at least 6 characters");
+      return;
+    }
     setSaving(true);
     try {
-      const body: { name?: string; role?: string; isActive?: boolean; newPassword?: string } = {
-        name: editForm.name,
+      const body: { name?: string; email?: string; role?: string; isActive?: boolean; newPassword?: string } = {
+        name: editForm.name.trim(),
+        email: editForm.email.trim(),
         role: editForm.role,
         isActive: editForm.isActive,
       };
@@ -179,6 +199,7 @@ export default function AdminUsersPage() {
           {editing ? (
             <div className="grid gap-4">
               <div><Label>Name</Label><Input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} /></div>
+              <div><Label>Email</Label><Input type="email" value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} /></div>
               <div>
                 <Label>Role</Label>
                 <Select value={editForm.role} onValueChange={(v) => setEditForm((f) => ({ ...f, role: v }))}>
@@ -192,13 +213,50 @@ export default function AdminUsersPage() {
                 <input type="checkbox" id="isActive" checked={editForm.isActive} onChange={(e) => setEditForm((f) => ({ ...f, isActive: e.target.checked }))} />
                 <Label htmlFor="isActive">Active</Label>
               </div>
-              <div><Label>New Password (leave blank to keep)</Label><Input type="password" value={editForm.newPassword} onChange={(e) => setEditForm((f) => ({ ...f, newPassword: e.target.value }))} placeholder="Min 6 characters" /></div>
+              <div>
+                <Label>New Password (leave blank to keep)</Label>
+                <div className="relative">
+                  <Input
+                    type={showEditPassword ? "text" : "password"}
+                    value={editForm.newPassword}
+                    onChange={(e) => setEditForm((f) => ({ ...f, newPassword: e.target.value }))}
+                    placeholder="Min 6 characters"
+                    className="pr-11"
+                  />
+                  <button
+                    type="button"
+                    aria-label={showEditPassword ? "Hide password" : "Show password"}
+                    className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-slate-500 hover:text-slate-700"
+                    onClick={() => setShowEditPassword((value) => !value)}
+                  >
+                    {showEditPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="grid gap-4">
               <div><Label>Name *</Label><Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></div>
               <div><Label>Email *</Label><Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></div>
-              <div><Label>Password * (min 6)</Label><Input type="password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} /></div>
+              <div>
+                <Label>Password * (min 6)</Label>
+                <div className="relative">
+                  <Input
+                    type={showNewPassword ? "text" : "password"}
+                    value={form.password}
+                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                    className="pr-11"
+                  />
+                  <button
+                    type="button"
+                    aria-label={showNewPassword ? "Hide password" : "Show password"}
+                    className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-slate-500 hover:text-slate-700"
+                    onClick={() => setShowNewPassword((value) => !value)}
+                  >
+                    {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
               <div>
                 <Label>Role</Label>
                 <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v }))}>

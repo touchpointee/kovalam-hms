@@ -26,6 +26,7 @@ const postSchema = z.object({
   items: z.array(itemSchema).min(1),
   billOffer: z.coerce.number().min(0).optional(),
   paymentMethodId: z.string().optional(),
+  generatedByName: z.string().optional(),
 });
 
 export const POST = withRouteLog("billing.procedure.POST", async (req: NextRequest) => {
@@ -73,6 +74,7 @@ export const POST = withRouteLog("billing.procedure.POST", async (req: NextReque
     const linesNetSum = itemsWithDetails.reduce((sum, i) => sum + i.totalPrice, 0);
     const grandTotal = grandTotalAfterBillOffer(linesNetSum, parsed.data.billOffer ?? 0);
     const userId = (session!.user as { id?: string }).id;
+    const generatedByName = parsed.data.generatedByName?.trim() || session!.user.name?.trim() || "";
 
     let paymentMethodRef;
     try {
@@ -92,11 +94,12 @@ export const POST = withRouteLog("billing.procedure.POST", async (req: NextReque
       items: itemsWithDetails,
       billOffer: clampBillOffer(linesNetSum, parsed.data.billOffer ?? 0),
       grandTotal,
+      ...(generatedByName ? { generatedByName } : {}),
       billedBy: userId,
       ...(paymentMethodRef ? { paymentMethod: paymentMethodRef } : {}),
     });
     const populated = await ProcedureBill.findById(bill._id)
-      .populate("patient", "name regNo age gender phone")
+      .populate("patient", "name regNo age gender phone address")
       .populate({
         path: "visit",
         select: "visitDate receiptNo opCharge",

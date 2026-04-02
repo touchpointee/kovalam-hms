@@ -217,10 +217,15 @@
     size: A4;
   }
 
-  /* Bills: A4 landscape; `page: bill` is set on #report-content only */
-  @page bill {
-    size: A4 landscape;
-    margin: 8mm;
+  /* Bills */
+  @page bill-landscape {
+    size: A5 landscape;
+    margin: 3mm;
+  }
+
+  @page bill-portrait {
+    size: A5 portrait;
+    margin: 3mm;
   }
 
   html {
@@ -371,7 +376,6 @@
     top: auto;
     width: 100%;
     max-width: 100% !important;
-    page: bill;
     min-height: 0 !important;
     height: auto !important;
     border: none !important;
@@ -387,11 +391,19 @@
     page-break-inside: avoid !important;
   }
 
+  #report-content.bill-paper-landscape {
+    page: bill-landscape;
+  }
+
+  #report-content.bill-paper-portrait {
+    page: bill-portrait;
+  }
+
   #report-content table,
   #report-content th,
   #report-content td {
-    font-size: 11px;
-    padding: 3px 6px;
+    font-size: 9px;
+    padding: 2px 4px;
   }
 
   /* Normal flow: fixed header/footer repeat on every printed page and caused an empty page 2 */

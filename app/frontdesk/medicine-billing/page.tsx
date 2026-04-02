@@ -1,3 +1,7 @@
 "use client";
 
-export { default } from "@/app/pharmacy/billing/page";
+import PharmacyBillingPage from "@/app/pharmacy/billing/page";
+
+export default function FrontdeskMedicineBillingPage() {
+  return <PharmacyBillingPage />;
+}

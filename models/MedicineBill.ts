@@ -24,6 +24,7 @@ const medicineBillSchema = new mongoose.Schema(
     items: [medicineBillItemSchema],
     billOffer: { type: Number, default: 0 },
     grandTotal: { type: Number, required: true },
+    generatedByName: { type: String, trim: true },
     billedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     billedAt: { type: Date, default: Date.now },
     paymentMethod: { type: mongoose.Schema.Types.ObjectId, ref: "PaymentMethod" },

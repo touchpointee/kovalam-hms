@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 const medicineStockSchema = new mongoose.Schema(
   {
     medicine: { type: mongoose.Schema.Types.ObjectId, ref: "Medicine", required: true },
+    inventoryType: { type: String, enum: ["store", "pharmacy"], default: "store" },
+    sourceStock: { type: mongoose.Schema.Types.ObjectId, ref: "MedicineStock", default: null },
     batchNo: { type: String, required: true },
     expiryDate: { type: Date, required: true },
     mrp: { type: Number, required: true },

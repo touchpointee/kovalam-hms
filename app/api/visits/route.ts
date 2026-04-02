@@ -165,10 +165,12 @@ const postSchema = z.object({
    * When set (e.g. by frontdesk), stored as this visit's OP charge instead of deriving from settings + 5-day waiver.
    */
   opCharge: z.number().min(0).optional(),
+  opChargeChangeReason: z.string().optional(),
   /** Optional consulting doctor (User id, role doctor). */
   doctorId: z.string().optional(),
   /** Required when this registration collects OP money (new visit and/or pending settlements). */
   paymentMethodId: z.string().optional(),
+  generatedByName: z.string().optional(),
 });
 
 function resolveVisitDateForCreate(input: string | undefined): Date {
@@ -235,9 +237,18 @@ export const POST = withRouteLog("visits.POST", async (req: NextRequest) => {
     const derivedOpCharge = hasRecentOpVisit ? 0 : baseOpCharge;
     const opCharge =
       parsed.data.opCharge !== undefined ? Math.max(0, Number(parsed.data.opCharge) || 0) : derivedOpCharge;
+    const opChargeChanged = Math.abs(opCharge - derivedOpCharge) > 0.001;
+    const opChargeChangeReason = parsed.data.opChargeChangeReason?.trim() || "";
+    if (opChargeChanged && !opChargeChangeReason) {
+      return NextResponse.json(
+        { message: "Reason is required when OP charge is changed" },
+        { status: 400 }
+      );
+    }
 
     const receiptNo = await generateReceiptNo();
     const userId = (session!.user as { id?: string }).id;
+    const generatedByName = parsed.data.generatedByName?.trim() || session!.user.name?.trim() || "";
 
     let doctorRef: mongoose.Types.ObjectId | undefined;
     try {
@@ -285,8 +296,10 @@ export const POST = withRouteLog("visits.POST", async (req: NextRequest) => {
       visitDate,
       status: "waiting",
       opCharge,
+      ...(opChargeChanged ? { opChargeChangeReason } : {}),
       paid: parsed.data.paid ?? false,
       receiptNo,
+      ...(generatedByName ? { generatedByName } : {}),
       collectedBy: userId,
       ...(paymentMethodRef ? { paymentMethod: paymentMethodRef } : {}),
     });

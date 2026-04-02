@@ -4,7 +4,7 @@ const logRetentionDays = Math.max(1, Number(process.env.LOG_RETENTION_DAYS ?? "9
 
 const systemLogSchema = new mongoose.Schema(
   {
-    createdAt: { type: Date, default: Date.now, index: true },
+    createdAt: { type: Date, default: Date.now },
     level: { type: String, enum: ["info", "warn", "error", "debug"], required: true },
     category: { type: String, enum: ["api", "auth", "client", "system"], required: true },
     message: { type: String, required: true },

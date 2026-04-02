@@ -77,6 +77,7 @@ export const PUT = withRouteLog("billing.procedure.billId.PUT", async (
     }
 
     const body = await req.json();
+    const generatedByName = String(body.generatedByName ?? "").trim() || session.user.name?.trim() || "";
     const parsedItems = z.array(itemSchema).min(1).safeParse(
       (body.items ?? []).map((item: { procedureId: string; quantity: number; lineOffer?: number }) => ({
         procedureId: item.procedureId,
@@ -130,16 +131,17 @@ export const PUT = withRouteLog("billing.procedure.billId.PUT", async (
       return NextResponse.json({ message: "Payment method is required" }, { status: 400 });
     }
 
-    bill.items = itemsWithDetails;
+    bill.items = itemsWithDetails as unknown as typeof bill.items;
     bill.billOffer = clampBillOffer(linesNetSum, billOfferRaw);
     bill.grandTotal = grandTotal;
     bill.billedAt = new Date();
-    bill.billedBy = (session.user as { id?: string }).id;
+    bill.generatedByName = generatedByName;
+    bill.billedBy = (session.user as { id?: string }).id as unknown as mongoose.Types.ObjectId;
     if (paymentMethodRef) bill.paymentMethod = paymentMethodRef;
     await bill.save();
 
     const populated = await ProcedureBill.findById(bill._id)
-      .populate("patient", "name regNo age gender phone")
+      .populate("patient", "name regNo age gender phone address")
       .populate({
         path: "visit",
         select: "visitDate receiptNo opCharge",

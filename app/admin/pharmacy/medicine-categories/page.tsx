@@ -1,3 +1,7 @@
 "use client";
 
-export { default } from "@/app/pharmacy/medicine-categories/page";
+import PharmacyMedicineCategoriesPage from "@/app/pharmacy/medicine-categories/page";
+
+export default function AdminMedicineCategoriesPage() {
+  return <PharmacyMedicineCategoriesPage />;
+}

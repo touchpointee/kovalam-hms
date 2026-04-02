@@ -29,7 +29,7 @@ export default function PharmacyDashboardPage() {
           setServedTodayCount(list.length);
         })
         .catch(() => setServedTodayCount(0)),
-      fetch("/api/stock/low", { cache: "no-store" })
+      fetch("/api/stock/low?inventoryType=pharmacy", { cache: "no-store" })
         .then((r) => r.json())
         .then((data) => setLowStock(Array.isArray(data) ? data : []))
         .catch(() => setLowStock([])),

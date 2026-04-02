@@ -1,3 +1,7 @@
 "use client";
 
-export { default } from "@/app/pharmacy/manufacturers/page";
+import PharmacyManufacturersPage from "@/app/pharmacy/manufacturers/page";
+
+export default function AdminManufacturersPage() {
+  return <PharmacyManufacturersPage />;
+}

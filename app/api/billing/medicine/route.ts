@@ -15,6 +15,7 @@ import {
   grandTotalAfterBillOffer,
   lineNetAfterOffer,
 } from "@/lib/bill-offers";
+import { buildInventoryTypeQuery } from "@/lib/stock";
 
 const itemSchema = z.object({
   medicineStockId: z.string().min(1),
@@ -30,6 +31,7 @@ const postSchema = z.object({
   items: z.array(itemSchema).min(1),
   billOffer: z.coerce.number().min(0).optional(),
   paymentMethodId: z.string().optional(),
+  generatedByName: z.string().optional(),
 });
 
 export const POST = withRouteLog("billing.medicine.POST", async (req: NextRequest) => {
@@ -58,6 +60,7 @@ export const POST = withRouteLog("billing.medicine.POST", async (req: NextReques
     }
 
     const userId = (session!.user as { id?: string }).id;
+    const generatedByName = parsed.data.generatedByName?.trim() || session!.user.name?.trim() || "";
     const visit = await OPVisit.findById(parsed.data.visitId).lean() as { patient?: string } | null;
     if (!visit) {
       return NextResponse.json({ message: "Visit not found" }, { status: 400 });
@@ -88,9 +91,12 @@ export const POST = withRouteLog("billing.medicine.POST", async (req: NextReques
       totalPrice: number;
     }> = [];
     for (const item of parsed.data.items) {
-      const stock = await MedicineStock.findById(item.medicineStockId);
+      const stock = await MedicineStock.findOne({
+        _id: item.medicineStockId,
+        ...buildInventoryTypeQuery("pharmacy"),
+      });
       if (!stock) {
-        return NextResponse.json({ message: `Stock ${item.medicineStockId} not found` }, { status: 400 });
+        return NextResponse.json({ message: `Pharmacy stock ${item.medicineStockId} not found` }, { status: 400 });
       }
       if (stock.currentStock < item.quantity) {
         return NextResponse.json(
@@ -143,6 +149,7 @@ export const POST = withRouteLog("billing.medicine.POST", async (req: NextReques
       items: billItems,
       billOffer: clampBillOffer(linesNetSum, parsed.data.billOffer ?? 0),
       grandTotal,
+      ...(generatedByName ? { generatedByName } : {}),
       billedBy: userId,
       ...(paymentMethodRef ? { paymentMethod: paymentMethodRef } : {}),
     });
@@ -158,6 +165,7 @@ export const POST = withRouteLog("billing.medicine.POST", async (req: NextReques
       await StockTransaction.create({
         medicineStock: stock._id,
         medicine: stock.medicine,
+        inventoryType: stock.inventoryType ?? "pharmacy",
         transactionType: "out",
         quantity,
         previousQuantity: prevQty,
@@ -168,7 +176,7 @@ export const POST = withRouteLog("billing.medicine.POST", async (req: NextReques
       });
     }
     const populated = await MedicineBill.findById(bill._id)
-      .populate("patient", "name regNo age gender phone")
+      .populate("patient", "name regNo age gender phone address")
       .populate({
         path: "visit",
         select: "visitDate receiptNo",

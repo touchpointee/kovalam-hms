@@ -19,12 +19,17 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { isValidMobileNumber, normalizeMobileNumber } from "@/lib/mobile";
 
 const schema = z.object({
   name: z.string().min(1, "Name required"),
   age: z.coerce.number().min(0, "Age required"),
   gender: z.enum(["male", "female", "other"]),
-  phone: z.string().min(1, "Phone required"),
+  phone: z
+    .string()
+    .min(1, "Phone required")
+    .transform((value) => normalizeMobileNumber(value))
+    .refine((value) => isValidMobileNumber(value), "Enter a valid 10-digit mobile number"),
   address: z.string().optional(),
   bloodGroup: z.enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "Unknown"]).optional(),
 });
@@ -58,6 +63,7 @@ export default function RegisterPage() {
     resolver: zodResolver(schema),
     defaultValues: { gender: "male", bloodGroup: "Unknown" },
   });
+  const phoneField = register("phone");
   const gender = watch("gender");
   const bloodGroup = watch("bloodGroup");
 
@@ -159,7 +165,17 @@ export default function RegisterPage() {
                 </div>
                 <div>
                   <Label className="op-field-label">Phone *</Label>
-                  <Input {...register("phone")} className={errors.phone ? "border-destructive" : ""} />
+                  <Input
+                    {...phoneField}
+                    inputMode="numeric"
+                    maxLength={10}
+                    className={errors.phone ? "border-destructive" : ""}
+                    onChange={(e) => {
+                      e.target.value = normalizeMobileNumber(e.target.value);
+                      phoneField.onChange(e);
+                    }}
+                  />
+                  {errors.phone ? <p className="mt-1 text-sm text-destructive">{errors.phone.message}</p> : null}
                 </div>
                 <div className="sm:col-span-2">
                   <Label className="op-field-label">Address</Label>

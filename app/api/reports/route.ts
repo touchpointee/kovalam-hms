@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { dbConnect } from "@/lib/mongoose";
 import { requireAuth, requireRole } from "@/lib/api-auth";
 import OPVisit from "@/models/OPVisit";
+import "@/models/Procedure";
 import ProcedureBill from "@/models/ProcedureBill";
 import MedicineBill from "@/models/MedicineBill";
+import LabBill from "@/models/LabBill";
 import Expense from "@/models/Expense";
 import { parseISO, startOfDay, endOfDay } from "date-fns";
 import { withRouteLog } from "@/lib/with-route-log";
@@ -22,12 +24,20 @@ export const GET = withRouteLog("reports.GET", async (req: NextRequest) => {
     if (!fromStr || !toStr) {
       return NextResponse.json({ message: "from and to (ISO date) required" }, { status: 400 });
     }
-    const from = startOfDay(parseISO(fromStr));
-    const to = endOfDay(parseISO(toStr));
+    const parsedFrom = parseISO(fromStr);
+    const parsedTo = parseISO(toStr);
+    if (Number.isNaN(parsedFrom.getTime()) || Number.isNaN(parsedTo.getTime())) {
+      return NextResponse.json({ message: "Invalid date range" }, { status: 400 });
+    }
+    const from = startOfDay(parsedFrom);
+    const to = endOfDay(parsedTo);
+    if (from > to) {
+      return NextResponse.json({ message: "From date must be before To date" }, { status: 400 });
+    }
 
     const dateFilter = { $gte: from, $lte: to };
 
-    const [opVisits, procedureBills, medicineBills, expenses] = await Promise.all([
+    const [opVisits, procedureBills, medicineBills, labBills, expenses] = await Promise.all([
       OPVisit.find({ visitDate: dateFilter, paid: true })
         .populate("patient", "name regNo")
         .sort({ visitDate: 1 })
@@ -38,6 +48,10 @@ export const GET = withRouteLog("reports.GET", async (req: NextRequest) => {
         .sort({ billedAt: 1 })
         .lean(),
       MedicineBill.find({ billedAt: dateFilter })
+        .populate("patient", "name regNo")
+        .sort({ billedAt: 1 })
+        .lean(),
+      LabBill.find({ billedAt: dateFilter })
         .populate("patient", "name regNo")
         .sort({ billedAt: 1 })
         .lean(),
@@ -56,6 +70,10 @@ export const GET = withRouteLog("reports.GET", async (req: NextRequest) => {
       count: medicineBills.length,
       totalAmount: medicineBills.reduce((s, b) => s + (b.grandTotal ?? 0), 0),
     };
+    const labSummary = {
+      count: labBills.length,
+      totalAmount: labBills.reduce((s, b) => s + (b.grandTotal ?? 0), 0),
+    };
     const expenseTotal = expenses.reduce((s, e) => s + (e.amount ?? 0), 0);
     const byCategory = Array.from(
       expenses.reduce((acc, e) => {
@@ -66,17 +84,23 @@ export const GET = withRouteLog("reports.GET", async (req: NextRequest) => {
     ).map(([category, amount]) => ({ category, amount }));
     const expenseSummary = { total: expenseTotal, byCategory };
     const netRevenue =
-      opSummary.totalAmount + procedureSummary.totalAmount + medicineSummary.totalAmount - expenseTotal;
+      opSummary.totalAmount +
+      procedureSummary.totalAmount +
+      medicineSummary.totalAmount +
+      labSummary.totalAmount -
+      expenseTotal;
 
     return NextResponse.json({
       opSummary,
       procedureSummary,
       medicineSummary,
+      labSummary,
       expenseSummary,
       netRevenue,
       opVisits,
       procedureBills,
       medicineBills,
+      labBills,
       expenses,
     });
   } catch (e) {

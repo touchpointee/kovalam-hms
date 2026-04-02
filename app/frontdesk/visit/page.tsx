@@ -3,12 +3,14 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { format, subDays } from "date-fns";
 import toast from "react-hot-toast";
 import { rupeesInWords } from "@/lib/rupees-in-words";
 import { formatCurrency, formatPaymentMethodLabel } from "@/lib/utils";
 import { PaymentMethodSelect } from "@/components/PaymentMethodSelect";
-import { PrintLayout } from "@/components/PrintLayout";
+import { BillingStaffSelect, getBillingStaffDisplayName } from "@/components/BillingStaffSelect";
+import { BillSignature, PrintLayout } from "@/components/PrintLayout";
 import { SearchableCombobox } from "@/components/SearchableCombobox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,7 +39,9 @@ type Visit = {
   visitDate: string;
   status?: "waiting" | "served";
   opCharge: number;
+  opChargeChangeReason?: string;
   paid: boolean;
+  generatedByName?: string;
   patient?: Patient;
   doctor?: { name?: string } | null;
   /** Prior OP collected when this visit was registered (for reprint). */
@@ -47,6 +51,7 @@ type Visit = {
     visitDate: string;
     opCharge: number;
   }>;
+  collectedBy?: { name?: string } | null;
   paymentMethod?: { name?: string; code?: string } | null;
 };
 
@@ -87,6 +92,7 @@ type CombinedBill = {
     label: string;
   }>;
   grandTotal: number;
+  generatedByName?: string;
   paymentMethodLabel?: string;
 };
 
@@ -125,6 +131,7 @@ function ConsultationReceiptPatientBlock({
       <div className="space-y-2">
         <ReceiptInfoRow label="DMC ID" value={patient.regNo ?? ""} />
         <ReceiptInfoRow label="Patient Name" value={patient.name ?? ""} />
+        <ReceiptInfoRow label="Phone" value={patient.phone ?? ""} />
         <ReceiptInfoRow label="Address" value={addr ?? ""} />
       </div>
       <div className="space-y-2">
@@ -139,9 +146,11 @@ function ConsultationReceiptPatientBlock({
 function ConsultationPaymentAndTotals({
   paymentMethodLabel,
   grandTotal,
+  generatedByName,
 }: {
   paymentMethodLabel: string;
   grandTotal: number;
+  generatedByName?: string;
 }) {
   const pm = paymentMethodLabel.trim();
   return (
@@ -163,6 +172,7 @@ function ConsultationPaymentAndTotals({
           <span className="tabular-nums">{formatCurrency(grandTotal)}</span>
         </div>
       </div>
+      <BillSignature staffName={getBillingStaffDisplayName(generatedByName)} />
     </>
   );
 }
@@ -196,11 +206,13 @@ function buildCombinedBillFromStoredVisit(data: Visit): CombinedBill | null {
     primaryConsultationAt: data.visitDate,
     lines,
     grandTotal,
+    generatedByName: data.generatedByName?.trim() || data.collectedBy?.name?.trim() || "",
     paymentMethodLabel: formatPaymentMethodLabel(data.paymentMethod),
   };
 }
 
 export default function VisitPage() {
+  const { data: session } = useSession();
   const searchParams = useSearchParams();
   const presetPatientId = searchParams.get("patientId");
   const fromPatientDetail = searchParams.get("from") === "patient-detail";
@@ -209,8 +221,10 @@ export default function VisitPage() {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   /** Standard OP charge from settings (shown in the highlight card). */
   const [baseOpCharge, setBaseOpCharge] = useState(0);
+  const [defaultConsultationFee, setDefaultConsultationFee] = useState(0);
   /** Effective fee for the selected patient (0 if free within 5 days of last OP visit creation). */
-  const [consultationFee, setConsultationFee] = useState(0);
+  const [consultationFee, setConsultationFee] = useState("0");
+  const [opChargeChangeReason, setOpChargeChangeReason] = useState("");
   /** Most recent prior OP visit (any status), for 5-day waiver messaging. */
   const [lastPriorOpVisit, setLastPriorOpVisit] = useState<{
     visitDate: string;
@@ -222,6 +236,7 @@ export default function VisitPage() {
   const [createdVisit, setCreatedVisit] = useState<Visit | null>(null);
   const [todayVisits, setTodayVisits] = useState<Visit[]>([]);
   const [paymentMethodId, setPaymentMethodId] = useState("");
+  const [generatedByName, setGeneratedByName] = useState("");
   const [printVisit, setPrintVisit] = useState<Visit | null>(null);
   const [combinedBill, setCombinedBill] = useState<CombinedBill | null>(null);
   const [outstandingOp, setOutstandingOp] = useState<OutstandingOpResponse | null>(null);
@@ -309,6 +324,7 @@ export default function VisitPage() {
       primaryConsultationAt: data.visitDate,
       lines,
       grandTotal,
+      generatedByName: data.generatedByName?.trim() || data.collectedBy?.name?.trim() || "",
       paymentMethodLabel: formatPaymentMethodLabel(data.paymentMethod),
     });
     window.setTimeout(() => {
@@ -354,10 +370,16 @@ export default function VisitPage() {
       .reduce((s, v) => s + v.opCharge, 0);
   }, [outstandingOp, pendingPaySelected]);
 
+  const consultationFeeAmount = useMemo(() => {
+    const parsed = Number.parseFloat(consultationFee);
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+  }, [consultationFee]);
+  const opChargeChanged = Math.abs(consultationFeeAmount - defaultConsultationFee) > 0.001;
+
   const newVisitPayableTotal = useMemo(() => {
-    if (consultationFee <= 0) return 0;
-    return paid ? consultationFee : 0;
-  }, [consultationFee, paid]);
+    if (consultationFeeAmount <= 0) return 0;
+    return paid ? consultationFeeAmount : 0;
+  }, [consultationFeeAmount, paid]);
 
   const collectionGrandTotal = selectedPendingTotal + newVisitPayableTotal;
   const consultationPatientId =
@@ -375,7 +397,9 @@ export default function VisitPage() {
 
   useEffect(() => {
     if (!selectedPatient) {
-      setConsultationFee(baseOpCharge);
+      setConsultationFee(String(baseOpCharge));
+      setDefaultConsultationFee(baseOpCharge);
+      setOpChargeChangeReason("");
       setLastPriorOpVisit(null);
       return;
     }
@@ -394,25 +418,32 @@ export default function VisitPage() {
         const priorOp = sorted.find((v) => v.visitDate && new Date(v.visitDate) < effectiveAt);
         if (!priorOp?.visitDate) {
           setLastPriorOpVisit(null);
-          setConsultationFee(baseOpCharge);
+          setDefaultConsultationFee(baseOpCharge);
+          setConsultationFee(String(baseOpCharge));
+          setOpChargeChangeReason("");
           return;
         }
         setLastPriorOpVisit({ visitDate: priorOp.visitDate, receiptNo: priorOp.receiptNo });
         const fiveDaysAgo = subDays(effectiveAt, 5);
         const vd = new Date(priorOp.visitDate);
-        setConsultationFee(vd >= fiveDaysAgo ? 0 : baseOpCharge);
+        const nextDefaultFee = vd >= fiveDaysAgo ? 0 : baseOpCharge;
+        setDefaultConsultationFee(nextDefaultFee);
+        setConsultationFee(String(nextDefaultFee));
+        setOpChargeChangeReason("");
       })
       .catch(() => {
         setLastPriorOpVisit(null);
-        setConsultationFee(baseOpCharge);
+        setDefaultConsultationFee(baseOpCharge);
+        setConsultationFee(String(baseOpCharge));
+        setOpChargeChangeReason("");
       });
   }, [selectedPatient, baseOpCharge]);
 
   useEffect(() => {
-    if (consultationFee === 0) {
+    if (consultationFeeAmount === 0) {
       setPaid(true);
     }
-  }, [consultationFee]);
+  }, [consultationFeeAmount]);
 
   useEffect(() => {
     if (!selectedPatient) {
@@ -474,13 +505,25 @@ export default function VisitPage() {
       toast.error("Select a patient first");
       return;
     }
+    if (!selectedDoctorId.trim()) {
+      toast.error("Select a consulting doctor");
+      return;
+    }
+    if (!generatedByName.trim()) {
+      toast.error("Select staff before creating OP visit");
+      return;
+    }
+    if (opChargeChanged && !opChargeChangeReason.trim()) {
+      toast.error("Enter reason for changing OP charge");
+      return;
+    }
     if (collectionGrandTotal > 0 && !paymentMethodId.trim()) {
       toast.error("Select a payment method for this collection");
       return;
     }
     setLoading(true);
     try {
-      const paidPayload = consultationFee === 0 ? true : paid;
+      const paidPayload = consultationFeeAmount === 0 ? true : paid;
       const settlePendingVisitIds = Object.entries(pendingPaySelected)
         .filter(([, checked]) => checked)
         .map(([id]) => id);
@@ -490,7 +533,9 @@ export default function VisitPage() {
         body: JSON.stringify({
           patientId: selectedPatient._id,
           paid: paidPayload,
-          opCharge: Math.max(0, Number(consultationFee) || 0),
+          opCharge: consultationFeeAmount,
+          ...(opChargeChanged ? { opChargeChangeReason: opChargeChangeReason.trim() } : {}),
+          generatedByName,
           ...(selectedDoctorId ? { doctorId: selectedDoctorId } : {}),
           ...(settlePendingVisitIds.length > 0 ? { settlePendingVisitIds } : {}),
           ...(collectionGrandTotal > 0 && paymentMethodId.trim()
@@ -511,7 +556,7 @@ export default function VisitPage() {
 
       if (hasSettlement) {
         openCombinedPrintFromResponse(data, selectedPatient);
-      } else if (isPaid && charge > 0) {
+      } else {
         await openPrintPreview(data?._id, data);
       }
 
@@ -528,15 +573,24 @@ export default function VisitPage() {
       } else if (isPaid && charge > 0) {
         toast.success("Visit created — consultation bill ready to print below.");
       } else if (isPaid && charge <= 0) {
-        toast.success("Visit created (no OP fee for this visit).");
+        toast.success("Visit created — receipt ready below (no OP fee for this visit).");
       } else {
-        toast.success("Visit created — OP fee pending. Bill is not printed until payment is collected.");
+        toast.success("Visit created — receipt preview is shown below. OP fee is still pending.");
       }
       loadTodayVisits();
       setPendingPaySelected({});
       setSelectedPatient(null);
       setSelectedDoctorId("");
       setSearch("");
+      setResults([]);
+      setGeneratedByName("");
+      setPaymentMethodId("");
+      setOutstandingOp(null);
+      setConsultationFee(String(baseOpCharge));
+      setDefaultConsultationFee(baseOpCharge);
+      setOpChargeChangeReason("");
+      setLastPriorOpVisit(null);
+      setPaid(true);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed");
     } finally {
@@ -606,7 +660,7 @@ export default function VisitPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="op-field-label">Consulting doctor</Label>
+                  <Label className="op-field-label">Consulting doctor *</Label>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
                     <div className="min-w-0 flex-1">
                       <SearchableCombobox
@@ -709,18 +763,32 @@ export default function VisitPage() {
                         onChange={(e) => {
                           const raw = e.target.value;
                           if (raw === "") {
-                            setConsultationFee(0);
+                            setConsultationFee("");
                             return;
                           }
-                          const v = parseFloat(raw);
-                          if (!Number.isNaN(v)) setConsultationFee(Math.max(0, v));
+                          const v = Number.parseFloat(raw);
+                          if (!Number.isNaN(v)) setConsultationFee(String(Math.max(0, v)));
                         }}
                       />
                       <span className="text-sm text-slate-500">
-                        = <span className="font-semibold text-slate-800">{formatCurrency(consultationFee)}</span>
+                        = <span className="font-semibold text-slate-800">{formatCurrency(consultationFeeAmount)}</span>
                       </span>
                     </div>
                   </div>
+                  {opChargeChanged ? (
+                    <div className="mt-3 space-y-2">
+                      <Label htmlFor="op-charge-change-reason" className="text-sm text-slate-600">
+                        Reason for OP charge change *
+                      </Label>
+                      <Input
+                        id="op-charge-change-reason"
+                        value={opChargeChangeReason}
+                        onChange={(e) => setOpChargeChangeReason(e.target.value)}
+                        className="op-input max-w-xl"
+                        placeholder="Why is the OP charge changed from the default?"
+                      />
+                    </div>
+                  ) : null}
                   {lastPriorOpVisit ? (
                     <div className="mt-2 space-y-1 rounded-md border border-emerald-200/80 bg-white/80 px-3 py-2 text-xs text-slate-700">
                       <p>
@@ -728,7 +796,7 @@ export default function VisitPage() {
                         {format(new Date(lastPriorOpVisit.visitDate), "dd MMM yyyy, HH:mm")}
                         {lastPriorOpVisit.receiptNo ? ` (receipt ${lastPriorOpVisit.receiptNo})` : ""}
                       </p>
-                      {consultationFee === 0 ? (
+                      {consultationFeeAmount === 0 ? (
                         <p className="text-emerald-800">
                           Within 5 days of that visit — <span className="font-medium">no new OP charge</span> for this
                           registration. Unpaid OP from{" "}
@@ -749,7 +817,7 @@ export default function VisitPage() {
                       No prior OP visit on record — full OP charge applies for this first consultation period.
                     </p>
                   )}
-                  {consultationFee > 0 ? (
+                  {consultationFeeAmount > 0 ? (
                     <div className="mt-3 flex items-center gap-2">
                       <input
                         type="checkbox"
@@ -764,6 +832,22 @@ export default function VisitPage() {
                       No OP payment for this visit — nothing to collect.
                     </p>
                   )}
+                  <div className="mt-4 space-y-2">
+                    <Label htmlFor="op-generated-by" className="text-sm text-slate-600">
+                      Name to show on bill
+                    </Label>
+                    <BillingStaffSelect
+                      id="op-generated-by"
+                      label=""
+                      value={generatedByName}
+                      onValueChange={setGeneratedByName}
+                      className="max-w-[16rem]"
+                      triggerClassName="w-full max-w-[16rem] bg-white"
+                    />
+                    <p className="text-xs text-slate-500">
+                      Prints as a small “Generated by” line on the OP bill.
+                    </p>
+                  </div>
                 </div>
 
                 {selectedPatient && collectionGrandTotal > 0 && (
@@ -772,11 +856,11 @@ export default function VisitPage() {
                     <p className="mt-1 text-2xl font-bold tabular-nums">{formatCurrency(collectionGrandTotal)}</p>
                     <p className="mt-1 text-xs text-slate-600">
                       Prior visit(s): {formatCurrency(selectedPendingTotal)}
-                      {consultationFee > 0 ? (
+                      {consultationFeeAmount > 0 ? (
                         <>
                           {" "}
                           · This new visit: {formatCurrency(newVisitPayableTotal)}
-                          {!paid && consultationFee > 0 ? " (mark as paid to include)" : ""}
+                          {!paid && consultationFeeAmount > 0 ? " (mark as paid to include)" : ""}
                         </>
                       ) : null}
                     </p>
@@ -880,6 +964,7 @@ export default function VisitPage() {
         <div id="consultation-bill-preview">
           <PrintLayout
             title={combinedBill ? "OP consultation receipt" : "Consultation Bill"}
+            paper="landscape"
             actions={
               <div className="flex items-center gap-2">
                 <Button variant="default" onClick={() => window.print()}>
@@ -899,19 +984,11 @@ export default function VisitPage() {
           >
             {combinedBill ? (
               <div className="space-y-4 print-only">
-                <div className="space-y-1">
-                  <p className="text-base font-semibold text-slate-900">
-                    Receipt No.: <span className="tabular-nums">{combinedBill.primaryReceiptNo}</span>
-                  </p>
-                  {combinedBill.lines.length > 1 ? (
-                    <p className="text-xs text-slate-600">
-                      Includes one or more prior visits with OP collected in this payment.
-                    </p>
-                  ) : null}
+                {combinedBill.lines.length > 1 ? (
                   <p className="text-xs text-slate-600">
-                    Printed: {format(new Date(), "dd-MMM-yyyy, HH:mm")}
+                    Includes one or more prior visits with OP collected in this payment.
                   </p>
-                </div>
+                ) : null}
 
                 <ConsultationReceiptPatientBlock
                   patient={combinedBill.patient}
@@ -951,19 +1028,11 @@ export default function VisitPage() {
                 <ConsultationPaymentAndTotals
                   paymentMethodLabel={combinedBill.paymentMethodLabel ?? ""}
                   grandTotal={combinedBill.grandTotal}
+                  generatedByName={combinedBill.generatedByName}
                 />
               </div>
             ) : printVisit ? (
               <div className="space-y-4 print-only">
-                <div className="space-y-1">
-                  <p className="text-base font-semibold text-slate-900">
-                    Receipt No.: <span className="tabular-nums">{printVisit.receiptNo}</span>
-                  </p>
-                  <p className="text-xs text-slate-600">
-                    Printed: {format(new Date(), "dd-MMM-yyyy, HH:mm")}
-                  </p>
-                </div>
-
                 {printVisit.patient ? (
                   <ConsultationReceiptPatientBlock
                     patient={printVisit.patient as Patient}
@@ -1009,6 +1078,7 @@ export default function VisitPage() {
                 <ConsultationPaymentAndTotals
                   paymentMethodLabel={formatPaymentMethodLabel(printVisit.paymentMethod)}
                   grandTotal={Number(printVisit.opCharge ?? 0)}
+                  generatedByName={printVisit.generatedByName || printVisit.collectedBy?.name}
                 />
               </div>
             ) : null}

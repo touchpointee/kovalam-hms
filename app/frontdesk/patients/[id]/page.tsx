@@ -6,7 +6,10 @@ import { useParams } from "next/navigation";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
 import { Trash2 } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { rupeesInWords } from "@/lib/rupees-in-words";
+import { formatCurrency, formatPaymentMethodLabel } from "@/lib/utils";
+import { BillSignature, PrintLayout } from "@/components/PrintLayout";
+import { getBillingStaffDisplayName } from "@/components/BillingStaffSelect";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +40,16 @@ type Visit = {
   paid?: boolean;
   status?: "waiting" | "served";
   opCharge?: number;
+  generatedByName?: string;
+  doctor?: { name?: string } | null;
+  collectedBy?: { name?: string } | null;
+  paymentMethod?: { name?: string; code?: string } | null;
+  priorSettlementTotal?: number;
+  priorSettlementLines?: Array<{
+    receiptNo: string;
+    visitDate: string;
+    opCharge: number;
+  }>;
 };
 
 type PatientDetail = {
@@ -75,10 +88,165 @@ const emptyMedRow = (): MedRow => ({
   lineFee: "",
 });
 
-function toDatetimeLocalValue(iso: string) {
-  const d = new Date(iso);
+type PrintableVisit = Visit & {
+  patient?: {
+    _id?: string;
+    regNo?: string;
+    name?: string;
+    age?: number;
+    gender?: string;
+    phone?: string;
+    address?: string;
+  };
+};
+
+type CombinedBill = {
+  patient: {
+    regNo: string;
+    name: string;
+    age: number;
+    gender: string;
+    phone: string;
+    address?: string;
+  };
+  consultantName?: string | null;
+  primaryConsultationAt?: string;
+  lines: Array<{
+    receiptNo: string;
+    visitDate: string;
+    opCharge: number;
+    label: string;
+  }>;
+  grandTotal: number;
+  generatedByName?: string;
+  paymentMethodLabel?: string;
+};
+
+function toDatetimeLocalValue(value: string | Date) {
+  const d = value instanceof Date ? value : new Date(value);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function formatAppointmentSlot(iso?: string | null) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${format(d, "dd-MM-yyyy")} · ${format(d, "h:mm a")}`;
+}
+
+function ReceiptInfoRow({ label, value }: { label: string; value: string }) {
+  const v = value.trim();
+  return (
+    <div className="grid grid-cols-[130px_1fr] gap-x-1 text-[15px] leading-snug">
+      <span className="text-slate-800">{label}</span>
+      <span>: {v || "—"}</span>
+    </div>
+  );
+}
+
+function ConsultationReceiptPatientBlock({
+  patient,
+  consultantName,
+  appointmentAt,
+}: {
+  patient: CombinedBill["patient"];
+  consultantName?: string | null;
+  appointmentAt?: string | null;
+}) {
+  const addr = patient.address?.trim();
+  const age =
+    patient.age != null && !Number.isNaN(Number(patient.age)) ? String(patient.age) : "—";
+  const gender = patient.gender?.trim() || "—";
+  return (
+    <div className="grid grid-cols-2 gap-8 border-y-2 border-slate-800 py-4 text-[15px]">
+      <div className="space-y-2">
+        <ReceiptInfoRow label="DMC ID" value={patient.regNo ?? ""} />
+        <ReceiptInfoRow label="Patient Name" value={patient.name ?? ""} />
+        <ReceiptInfoRow label="Phone" value={patient.phone ?? ""} />
+        <ReceiptInfoRow label="Address" value={addr ?? ""} />
+      </div>
+      <div className="space-y-2">
+        <ReceiptInfoRow label="Appointment date" value={formatAppointmentSlot(appointmentAt)} />
+        <ReceiptInfoRow label="Consultant doctor" value={consultantName?.trim() ?? ""} />
+        <ReceiptInfoRow label="Age / Gender" value={`${age} / ${gender}`} />
+      </div>
+    </div>
+  );
+}
+
+function ConsultationPaymentAndTotals({
+  paymentMethodLabel,
+  grandTotal,
+  generatedByName,
+}: {
+  paymentMethodLabel: string;
+  grandTotal: number;
+  generatedByName?: string;
+}) {
+  const pm = paymentMethodLabel.trim();
+  return (
+    <>
+      <div className="mt-4 rounded-sm border-2 border-slate-800 bg-slate-50/80 px-3 py-2.5 print:bg-white">
+        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-900">Payment details</p>
+        <div className="mt-2 grid grid-cols-[140px_1fr] gap-x-1 text-[14px]">
+          <span className="text-slate-800">Payment method</span>
+          <span>: {pm || "—"}</span>
+        </div>
+      </div>
+      <div className="mt-5 border-2 border-slate-800 px-3 py-3 text-[15px]">
+        <p className="leading-relaxed">
+          <span className="font-semibold text-slate-900">Total amount (in words):</span>{" "}
+          <span className="text-slate-800">{rupeesInWords(grandTotal)}</span>
+        </p>
+        <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2 border-t border-slate-400 pt-2.5 font-semibold text-slate-900">
+          <span>Total collected</span>
+          <span className="tabular-nums">{formatCurrency(grandTotal)}</span>
+        </div>
+      </div>
+      <BillSignature staffName={getBillingStaffDisplayName(generatedByName)} />
+    </>
+  );
+}
+
+function buildCombinedBillFromStoredVisit(data: PrintableVisit): CombinedBill | null {
+  const patient = data.patient;
+  if (!patient?.name || !patient.regNo || !patient.phone) return null;
+  const lines: CombinedBill["lines"] = [];
+  for (const line of data.priorSettlementLines ?? []) {
+    lines.push({
+      receiptNo: line.receiptNo,
+      visitDate: line.visitDate,
+      opCharge: Number(line.opCharge) || 0,
+      label: "Consultation fees",
+    });
+  }
+  if (data.paid && Number(data.opCharge ?? 0) > 0) {
+    lines.push({
+      receiptNo: data.receiptNo ?? "",
+      visitDate: data.visitDate,
+      opCharge: Number(data.opCharge) || 0,
+      label: "Consultation fees",
+    });
+  }
+  const grandTotal = lines.reduce((s, l) => s + l.opCharge, 0);
+  if (grandTotal <= 0) return null;
+  return {
+    patient: {
+      regNo: patient.regNo,
+      name: patient.name,
+      age: Number(patient.age ?? 0),
+      gender: patient.gender ?? "",
+      phone: patient.phone,
+      address: patient.address,
+    },
+    consultantName: data.doctor?.name ?? null,
+    primaryConsultationAt: data.visitDate,
+    lines,
+    grandTotal,
+    generatedByName: data.generatedByName?.trim() || data.collectedBy?.name?.trim() || "",
+    paymentMethodLabel: formatPaymentMethodLabel(data.paymentMethod),
+  };
 }
 
 export default function FrontdeskPatientDetailPage() {
@@ -88,9 +256,12 @@ export default function FrontdeskPatientDetailPage() {
   const [loading, setLoading] = useState(true);
   const [visitDialogOpen, setVisitDialogOpen] = useState(false);
   const [editingVisit, setEditingVisit] = useState<Visit | null>(null);
-  const [vDate, setVDate] = useState(toDatetimeLocalValue(new Date().toISOString()));
+  const [vDate, setVDate] = useState(toDatetimeLocalValue(new Date()));
   const [savingVisit, setSavingVisit] = useState(false);
   const [deletingVisitId, setDeletingVisitId] = useState<string | null>(null);
+  const [printingVisitId, setPrintingVisitId] = useState<string | null>(null);
+  const [printVisit, setPrintVisit] = useState<PrintableVisit | null>(null);
+  const [combinedBill, setCombinedBill] = useState<CombinedBill | null>(null);
   const [allProcedures, setAllProcedures] = useState<ProcedureOption[]>([]);
   const [allLabTests, setAllLabTests] = useState<LabTestOption[]>([]);
   const [selectedProcedureIds, setSelectedProcedureIds] = useState<string[]>([]);
@@ -101,8 +272,15 @@ export default function FrontdeskPatientDetailPage() {
   const [medicineRows, setMedicineRows] = useState<MedRow[]>([emptyMedRow()]);
   const [notes, setNotes] = useState("");
   const visitDateInputRef = useRef<HTMLInputElement>(null);
+  const visitDialogBodyRef = useRef<HTMLDivElement>(null);
   /** Synchronous guard — `disabled={savingVisit}` alone can miss rapid double-clicks before re-render. */
   const visitSaveInFlightRef = useRef(false);
+
+  const resetVisitDialogScroll = useCallback(() => {
+    const el = visitDialogBodyRef.current;
+    if (!el) return;
+    el.scrollTo({ top: 0, behavior: "auto" });
+  }, []);
 
   const openVisitDatetimePicker = useCallback(() => {
     const el = visitDateInputRef.current;
@@ -114,9 +292,13 @@ export default function FrontdeskPatientDetailPage() {
     }
   }, []);
 
-  const loadPatient = useCallback(async () => {
+  const setVisitDatetimeToNow = useCallback(() => {
+    setVDate(toDatetimeLocalValue(new Date()));
+  }, []);
+
+  const loadPatient = useCallback(async (options?: { silent?: boolean }) => {
     if (!id) return;
-    setLoading(true);
+    if (!options?.silent) setLoading(true);
     try {
       const res = await fetch(`/api/patients/${id}`, { cache: "no-store" });
       const data = await res.json();
@@ -126,21 +308,26 @@ export default function FrontdeskPatientDetailPage() {
       setPatient(null);
       toast.error("Could not load patient");
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
   }, [id]);
 
   useEffect(() => {
     if (!id) return;
     loadPatient();
-    const interval = setInterval(loadPatient, 15000);
-    const onFocus = () => loadPatient();
+    if (visitDialogOpen) return;
+    const interval = setInterval(() => {
+      void loadPatient({ silent: true });
+    }, 15000);
+    const onFocus = () => {
+      void loadPatient({ silent: true });
+    };
     window.addEventListener("focus", onFocus);
     return () => {
       clearInterval(interval);
       window.removeEventListener("focus", onFocus);
     };
-  }, [id, loadPatient]);
+  }, [id, loadPatient, visitDialogOpen]);
 
   useEffect(() => {
     fetch("/api/procedures", { cache: "no-store" })
@@ -158,6 +345,17 @@ export default function FrontdeskPatientDetailPage() {
 
   const visits = useMemo(() => patient?.visits ?? [], [patient]);
 
+  const applyVisitToPrintState = useCallback((visitData: PrintableVisit) => {
+    const combined = buildCombinedBillFromStoredVisit(visitData);
+    if (combined) {
+      setCombinedBill(combined);
+      setPrintVisit(null);
+      return;
+    }
+    setCombinedBill(null);
+    setPrintVisit(visitData);
+  }, []);
+
   const resetClinicalFields = () => {
     setSelectedProcedureIds([]);
     setSelectedLabTestIds([]);
@@ -167,7 +365,7 @@ export default function FrontdeskPatientDetailPage() {
 
   const openCreateVisit = () => {
     setEditingVisit(null);
-    setVDate(toDatetimeLocalValue(new Date().toISOString()));
+    setVDate(toDatetimeLocalValue(new Date()));
     resetClinicalFields();
     setProcedureSearch("");
     setLabSearch("");
@@ -195,6 +393,7 @@ export default function FrontdeskPatientDetailPage() {
 
   useEffect(() => {
     if (!visitDialogOpen || !patient?._id) return;
+    resetVisitDialogScroll();
     if (!editingVisit?._id) {
       resetClinicalFields();
       return;
@@ -262,7 +461,7 @@ export default function FrontdeskPatientDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [visitDialogOpen, editingVisit?._id, patient?._id]);
+  }, [visitDialogOpen, editingVisit?._id, patient?._id, resetVisitDialogScroll]);
 
   const toggleProcedure = (procId: string) => {
     setSelectedProcedureIds((prev) =>
@@ -386,6 +585,26 @@ export default function FrontdeskPatientDetailPage() {
     }
   };
 
+  const openPrintPreview = useCallback(async (visitId: string) => {
+    setPrintingVisitId(visitId);
+    try {
+      const res = await fetch(`/api/visits/${visitId}`, { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? "Failed to load consultation bill");
+      applyVisitToPrintState(data as PrintableVisit);
+      window.setTimeout(() => {
+        document.getElementById("consultation-bill-preview")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 50);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to load consultation bill");
+    } finally {
+      setPrintingVisitId(null);
+    }
+  }, [applyVisitToPrintState]);
+
   const saveVisit = async () => {
     if (!patient?._id || visitSaveInFlightRef.current) return;
     visitSaveInFlightRef.current = true;
@@ -487,7 +706,7 @@ export default function FrontdeskPatientDetailPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
-                  <TableHead>Receipt</TableHead>
+                  <TableHead>Consulting doctor</TableHead>
                   <TableHead>OP / consultation</TableHead>
                   <TableHead>Paid</TableHead>
                   <TableHead>Status</TableHead>
@@ -498,7 +717,7 @@ export default function FrontdeskPatientDetailPage() {
                 {visits.map((v) => (
                   <TableRow key={v._id}>
                     <TableCell>{format(new Date(v.visitDate), "dd MMM yyyy, HH:mm")}</TableCell>
-                    <TableCell>{v.receiptNo ?? "-"}</TableCell>
+                    <TableCell>{v.doctor?.name?.trim() || "-"}</TableCell>
                     <TableCell className="tabular-nums">
                       {formatCurrency(typeof v.opCharge === "number" ? v.opCharge : 0)}
                     </TableCell>
@@ -510,6 +729,9 @@ export default function FrontdeskPatientDetailPage() {
                       <div className="flex flex-wrap gap-2">
                         <Button type="button" size="sm" variant="outline" onClick={() => openEditVisit(v)}>
                           Edit
+                        </Button>
+                        <Button type="button" size="sm" variant="outline" onClick={() => void openPrintPreview(v._id)}>
+                          {printingVisitId === v._id ? "Loading…" : "Print Bill"}
                         </Button>
                         <Button asChild size="sm" variant="outline">
                           <Link href={`/doctor/patients/${patient._id}/consultation?visitId=${v._id}`}>
@@ -536,6 +758,136 @@ export default function FrontdeskPatientDetailPage() {
           )}
         </CardContent>
       </Card>
+      {(combinedBill || printVisit) && (
+        <div id="consultation-bill-preview">
+          <PrintLayout
+            title={combinedBill ? "OP consultation receipt" : "Consultation Bill"}
+            paper="landscape"
+            actions={
+              <div className="flex items-center gap-2">
+                <Button variant="default" onClick={() => window.print()}>
+                  {combinedBill ? "Print receipt" : "Print Consultation Bill"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setCombinedBill(null);
+                    setPrintVisit(null);
+                  }}
+                >
+                  Close Preview
+                </Button>
+              </div>
+            }
+          >
+            {combinedBill ? (
+              <div className="space-y-4 print-only">
+                {combinedBill.lines.length > 1 ? (
+                  <p className="text-xs text-slate-600">
+                    Includes one or more prior visits with OP collected in this payment.
+                  </p>
+                ) : null}
+
+                <ConsultationReceiptPatientBlock
+                  patient={combinedBill.patient}
+                  consultantName={combinedBill.consultantName}
+                  appointmentAt={combinedBill.primaryConsultationAt}
+                />
+
+                <table className="w-full border-collapse border-2 border-slate-800 text-[15px]">
+                  <thead>
+                    <tr className="bg-slate-100 print:bg-slate-50">
+                      <th className="border border-slate-800 px-3 py-2 text-left font-semibold">#</th>
+                      <th className="border border-slate-800 px-3 py-2 text-left font-semibold">Description</th>
+                      <th className="border border-slate-800 px-3 py-2 text-center font-semibold">Qty</th>
+                      <th className="border border-slate-800 px-3 py-2 text-right font-semibold">Rate</th>
+                      <th className="border border-slate-800 px-3 py-2 text-right font-semibold">Amount (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {combinedBill.lines.map((line, idx) => (
+                      <tr key={`${line.receiptNo}-${idx}`}>
+                        <td className="border border-slate-800 px-3 py-2 align-top">{idx + 1}</td>
+                        <td className="border border-slate-800 px-3 py-2 align-top">
+                          <div className="font-medium">{line.label}</div>
+                        </td>
+                        <td className="border border-slate-800 px-3 py-2 text-center align-top">1</td>
+                        <td className="border border-slate-800 px-3 py-2 text-right align-top tabular-nums">
+                          {formatCurrency(line.opCharge)}
+                        </td>
+                        <td className="border border-slate-800 px-3 py-2 text-right align-top tabular-nums">
+                          {formatCurrency(line.opCharge)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <ConsultationPaymentAndTotals
+                  paymentMethodLabel={combinedBill.paymentMethodLabel ?? ""}
+                  grandTotal={combinedBill.grandTotal}
+                  generatedByName={combinedBill.generatedByName}
+                />
+              </div>
+            ) : printVisit?.patient ? (
+              <div className="space-y-4 print-only">
+                <ConsultationReceiptPatientBlock
+                  patient={{
+                    regNo: printVisit.patient.regNo ?? patient.regNo,
+                    name: printVisit.patient.name ?? patient.name,
+                    age: Number(printVisit.patient.age ?? patient.age),
+                    gender: printVisit.patient.gender ?? patient.gender,
+                    phone: printVisit.patient.phone ?? patient.phone,
+                    address: printVisit.patient.address ?? patient.address,
+                  }}
+                  consultantName={printVisit.doctor?.name}
+                  appointmentAt={printVisit.visitDate}
+                />
+
+                <table className="w-full border-collapse border-2 border-slate-800 text-[15px]">
+                  <thead>
+                    <tr className="bg-slate-100 print:bg-slate-50">
+                      <th className="border border-slate-800 px-3 py-2 text-left font-semibold">#</th>
+                      <th className="border border-slate-800 px-3 py-2 text-left font-semibold">Description</th>
+                      <th className="border border-slate-800 px-3 py-2 text-center font-semibold">Qty</th>
+                      <th className="border border-slate-800 px-3 py-2 text-right font-semibold">Rate</th>
+                      <th className="border border-slate-800 px-3 py-2 text-right font-semibold">Amount (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="border border-slate-800 px-3 py-2 align-top">1</td>
+                      <td className="border border-slate-800 px-3 py-2 align-top">
+                        <div className="font-medium">Consultation fees</div>
+                        {Number(printVisit.opCharge ?? 0) === 0 ? (
+                          <div className="mt-1 text-xs text-slate-600">
+                            No fee recorded for this consultation.
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="border border-slate-800 px-3 py-2 text-center align-top">1</td>
+                      <td className="border border-slate-800 px-3 py-2 text-right align-top tabular-nums">
+                        {formatCurrency(Number(printVisit.opCharge ?? 0))}
+                      </td>
+                      <td className="border border-slate-800 px-3 py-2 text-right align-top tabular-nums">
+                        {formatCurrency(Number(printVisit.opCharge ?? 0))}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <ConsultationPaymentAndTotals
+                  paymentMethodLabel={formatPaymentMethodLabel(printVisit.paymentMethod)}
+                  grandTotal={Number(printVisit.opCharge ?? 0)}
+                  generatedByName={printVisit.generatedByName || printVisit.collectedBy?.name}
+                />
+              </div>
+            ) : (
+              <p className="text-sm text-amber-800">Patient details unavailable for this receipt.</p>
+            )}
+          </PrintLayout>
+        </div>
+      )}
       <Dialog
         open={visitDialogOpen}
         onOpenChange={(open) => {
@@ -544,7 +896,7 @@ export default function FrontdeskPatientDetailPage() {
         }}
       >
         <DialogContent
-          className="flex max-h-[90vh] max-w-2xl flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
+          className="flex max-h-[90vh] max-w-2xl flex-col gap-0 overflow-hidden p-0 shadow-md sm:max-w-3xl"
           onPointerDownOutside={(e) => savingVisit && e.preventDefault()}
           onEscapeKeyDown={(e) => savingVisit && e.preventDefault()}
         >
@@ -554,10 +906,18 @@ export default function FrontdeskPatientDetailPage() {
               Visit details, then procedures, medicines, and notes (same as consultation record).
             </p>
           </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+          <div
+            ref={visitDialogBodyRef}
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-4 [contain:layout_paint]"
+          >
             <div className="grid gap-4">
               <div className="space-y-2">
-                <Label htmlFor="vDate">Visit date & time</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="vDate">Visit date & time</Label>
+                  <Button type="button" variant="outline" size="sm" onClick={setVisitDatetimeToNow}>
+                    Now
+                  </Button>
+                </div>
                 <Input
                   ref={visitDateInputRef}
                   id="vDate"
@@ -567,6 +927,9 @@ export default function FrontdeskPatientDetailPage() {
                   onClick={openVisitDatetimePicker}
                   className="cursor-pointer"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Use <span className="font-medium">Now</span> to set the current date and current time together.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="consultationFee">Consultation fee (OP charge)</Label>
@@ -860,4 +1223,3 @@ export default function FrontdeskPatientDetailPage() {
     </div>
   );
 }
-

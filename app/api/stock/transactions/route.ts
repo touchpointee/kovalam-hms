@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth";
 import { requireRole } from "@/lib/api-auth";
 import StockTransaction from "@/models/StockTransaction";
 import { withRouteLog } from "@/lib/with-route-log";
+import { buildInventoryTypeQuery, normalizeStockInventoryType } from "@/lib/stock";
 
 export const GET = withRouteLog("stock.transactions.GET", async (req: NextRequest) => {
   try {
@@ -20,8 +21,9 @@ export const GET = withRouteLog("stock.transactions.GET", async (req: NextReques
     const medicineStockId = req.nextUrl.searchParams.get("medicineStockId");
     const from = req.nextUrl.searchParams.get("from");
     const to = req.nextUrl.searchParams.get("to");
+    const inventoryType = normalizeStockInventoryType(req.nextUrl.searchParams.get("inventoryType"));
 
-    const query: Record<string, unknown> = {};
+    const query: Record<string, unknown> = { ...buildInventoryTypeQuery(inventoryType) };
     if (medicineId) query.medicine = medicineId;
     if (medicineStockId) query.medicineStock = medicineStockId;
     if (from || to) {

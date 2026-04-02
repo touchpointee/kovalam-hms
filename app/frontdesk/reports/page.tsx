@@ -3,5 +3,5 @@
 import ReportsPage from "@/components/ReportsPage";
 
 export default function FrontdeskReportsPage() {
-  return <ReportsPage />;
+  return <ReportsPage mode="frontdesk-daily" />;
 }

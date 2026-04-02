@@ -6,7 +6,7 @@ import { useParams, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
-import { PrintLayout } from "@/components/PrintLayout";
+import { BillSignature, PrintLayout } from "@/components/PrintLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,12 +23,13 @@ import {
 import { X } from "lucide-react";
 import { formatCurrency, formatPaymentMethodLabel } from "@/lib/utils";
 import { PaymentMethodSelect } from "@/components/PaymentMethodSelect";
+import { BillingStaffSelect, getBillingStaffDisplayName } from "@/components/BillingStaffSelect";
 import {
   grandTotalAfterBillOffer,
   lineNetAfterOffer,
 } from "@/lib/bill-offers";
 
-type Patient = { _id: string; name: string; regNo: string };
+type Patient = { _id: string; name: string; regNo: string; phone?: string; age?: number; address?: string };
 type Visit = {
   _id: string;
   visitDate: string;
@@ -55,6 +56,8 @@ type ProcedureBill = {
   _id: string;
   patient?: Patient;
   billedAt?: string;
+  generatedByName?: string;
+  billedBy?: { name?: string } | null;
   items: ProcedureItem[];
   grandTotal: number;
   billOffer?: number;
@@ -64,6 +67,8 @@ type StoredProcedureBill = {
   _id: string;
   patient?: Patient;
   billedAt?: string;
+  generatedByName?: string;
+  billedBy?: { name?: string } | null;
   billOffer?: number;
   paymentMethod?: { _id?: string; name?: string; code?: string } | null;
   items: Array<{
@@ -96,6 +101,7 @@ export default function FrontdeskVisitProcedureBillingPage() {
   const [editingBill, setEditingBill] = useState(false);
   const [billOffer, setBillOffer] = useState(0);
   const [paymentMethodId, setPaymentMethodId] = useState("");
+  const [generatedByName, setGeneratedByName] = useState("");
 
   const hydrateStoredBillItems = useCallback((storedBill: StoredProcedureBill) => {
     const rows = storedBill.items.map((item) => {
@@ -115,6 +121,7 @@ export default function FrontdeskVisitProcedureBillingPage() {
     setBillOffer(Number(storedBill.billOffer) || 0);
     const pm = storedBill.paymentMethod;
     setPaymentMethodId(pm?._id ? String(pm._id) : "");
+    setGeneratedByName(storedBill.generatedByName?.trim() || "");
   }, []);
 
   useEffect(() => {
@@ -144,6 +151,7 @@ export default function FrontdeskVisitProcedureBillingPage() {
           setBill(null);
           setBillOffer(0);
           setPaymentMethodId("");
+          setGeneratedByName("");
           setEditingBill(true);
         }
       })
@@ -226,6 +234,10 @@ export default function FrontdeskVisitProcedureBillingPage() {
       toast.error("Add at least one procedure");
       return;
     }
+    if (!generatedByName.trim()) {
+      toast.error("Select staff before generating the bill");
+      return;
+    }
     if (grandTotal > 0 && !paymentMethodId.trim()) {
       toast.error("Select a payment method");
       return;
@@ -243,6 +255,7 @@ export default function FrontdeskVisitProcedureBillingPage() {
           ...(grandTotal > 0 && paymentMethodId.trim()
             ? { paymentMethodId: paymentMethodId.trim() }
             : {}),
+          generatedByName,
           items: items.map((item) => ({
             procedureId: item.procedureId,
             quantity: item.quantity,
@@ -266,6 +279,7 @@ export default function FrontdeskVisitProcedureBillingPage() {
     return (
       <PrintLayout
         title="Procedure Bill"
+        paper="landscape"
         actions={
           <div className="flex items-center gap-2">
             <Button variant="default" onClick={() => window.print()}>Print</Button>
@@ -283,7 +297,8 @@ export default function FrontdeskVisitProcedureBillingPage() {
             <div className="space-y-2">
               <div className="grid grid-cols-[120px_1fr]"><span>DMC ID</span><span>: {bill.patient?.regNo ?? "-"}</span></div>
               <div className="grid grid-cols-[120px_1fr]"><span>Patient Name</span><span>: {bill.patient?.name ?? "-"}</span></div>
-              <div className="grid grid-cols-[120px_1fr]"><span>Address</span><span>: -</span></div>
+              <div className="grid grid-cols-[120px_1fr]"><span>Phone</span><span>: {bill.patient?.phone ?? "-"}</span></div>
+              <div className="grid grid-cols-[120px_1fr]"><span>Address</span><span>: {bill.patient?.address?.trim() || "-"}</span></div>
             </div>
             <div className="space-y-2">
               <div className="grid grid-cols-[150px_1fr]">
@@ -301,7 +316,7 @@ export default function FrontdeskVisitProcedureBillingPage() {
                   : {bill.billedAt ? format(new Date(bill.billedAt), "dd MMM yyyy, HH:mm") : "—"}
                 </span>
               </div>
-              <div className="grid grid-cols-[150px_1fr]"><span>Age</span><span>: -</span></div>
+              <div className="grid grid-cols-[150px_1fr]"><span>Age</span><span>: {bill.patient?.age ?? "-"}</span></div>
               <div className="grid grid-cols-[150px_1fr]">
                 <span>Consultant Doctor</span>
                 <span>: {visit?.doctor?.name?.trim() ? visit.doctor.name : "—"}</span>
@@ -346,31 +361,36 @@ export default function FrontdeskVisitProcedureBillingPage() {
             const linesNet = bill.items.reduce((s, r) => s + Number(r.totalPrice), 0);
             const bo = Number(bill.billOffer) || 0;
             return (
-              <div className="ml-auto grid w-[340px] grid-cols-[1fr_120px] gap-y-1 pt-8 text-[15px]">
-                <div className="border-b border-slate-300 py-1">Subtotal (gross)</div>
-                <div className="border-b border-slate-300 py-1 text-right">{formatCurrency(grossSum)}</div>
-                <div className="border-b border-slate-300 py-1">Line offers</div>
-                <div className="border-b border-slate-300 py-1 text-right text-red-700">
-                  {lineOfferSum > 0 ? `−${formatCurrency(lineOfferSum)}` : "—"}
+              <div className="pt-8">
+                <div className="ml-auto grid w-[340px] grid-cols-[1fr_120px] gap-y-1 text-[15px]">
+                  <div className="border-b border-slate-300 py-1">Subtotal (gross)</div>
+                  <div className="border-b border-slate-300 py-1 text-right">{formatCurrency(grossSum)}</div>
+                  <div className="border-b border-slate-300 py-1">Line offers</div>
+                  <div className="border-b border-slate-300 py-1 text-right text-red-700">
+                    {lineOfferSum > 0 ? `−${formatCurrency(lineOfferSum)}` : "—"}
+                  </div>
+                  <div className="border-b border-slate-300 py-1">After line offers</div>
+                  <div className="border-b border-slate-300 py-1 text-right">{formatCurrency(linesNet)}</div>
+                  {bo > 0 ? (
+                    <>
+                      <div className="border-b border-slate-300 py-1">Bill offer</div>
+                      <div className="border-b border-slate-300 py-1 text-right text-red-700">−{formatCurrency(bo)}</div>
+                    </>
+                  ) : null}
+                  {formatPaymentMethodLabel(bill.paymentMethod) ? (
+                    <>
+                      <div className="border-b border-slate-300 py-1">Payment method</div>
+                      <div className="border-b border-slate-300 py-1 text-right">
+                        {formatPaymentMethodLabel(bill.paymentMethod)}
+                      </div>
+                    </>
+                  ) : null}
+                  <div className="py-1 font-semibold">Net amount</div>
+                  <div className="py-1 text-right font-semibold">{formatCurrency(bill.grandTotal)}</div>
                 </div>
-                <div className="border-b border-slate-300 py-1">After line offers</div>
-                <div className="border-b border-slate-300 py-1 text-right">{formatCurrency(linesNet)}</div>
-                {bo > 0 ? (
-                  <>
-                    <div className="border-b border-slate-300 py-1">Bill offer</div>
-                    <div className="border-b border-slate-300 py-1 text-right text-red-700">−{formatCurrency(bo)}</div>
-                  </>
-                ) : null}
-                {formatPaymentMethodLabel(bill.paymentMethod) ? (
-                  <>
-                    <div className="border-b border-slate-300 py-1">Payment method</div>
-                    <div className="border-b border-slate-300 py-1 text-right">
-                      {formatPaymentMethodLabel(bill.paymentMethod)}
-                    </div>
-                  </>
-                ) : null}
-                <div className="py-1 font-semibold">Net amount</div>
-                <div className="py-1 text-right font-semibold">{formatCurrency(bill.grandTotal)}</div>
+                <BillSignature
+                  staffName={getBillingStaffDisplayName(bill.generatedByName) || bill.billedBy?.name?.trim()}
+                />
               </div>
             );
           })()}
@@ -497,6 +517,20 @@ export default function FrontdeskVisitProcedureBillingPage() {
                     <p className="text-xs text-muted-foreground">
                       After line offers: {formatCurrency(linesNetSum)}
                       {billOffer > 0 ? ` · Net: ${formatCurrency(grandTotal)}` : ""}
+                    </p>
+                  </div>
+                  <div className="mt-4 flex max-w-md flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/80 p-4">
+                    <Label htmlFor="proc-generated-by">Name to show on bill</Label>
+                    <BillingStaffSelect
+                      id="proc-generated-by"
+                      label=""
+                      value={generatedByName}
+                      onValueChange={setGeneratedByName}
+                      className="max-w-[18rem]"
+                      triggerClassName="w-full max-w-[18rem]"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Prints as a small “Generated by” line on the bill.
                     </p>
                   </div>
                   <PaymentMethodSelect

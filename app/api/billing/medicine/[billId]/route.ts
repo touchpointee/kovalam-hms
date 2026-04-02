@@ -16,6 +16,7 @@ import {
   grandTotalAfterBillOffer,
   lineNetAfterOffer,
 } from "@/lib/bill-offers";
+import { buildInventoryTypeQuery } from "@/lib/stock";
 
 export const GET = withRouteLog("billing.medicine.billId.GET", async (
   _req: NextRequest,
@@ -78,7 +79,7 @@ export const PUT = withRouteLog("billing.medicine.billId.PUT", async (
     if (!existingBillDoc) {
       return NextResponse.json({ message: "Bill not found" }, { status: 404 });
     }
-    const existingBill = existingBillDoc.toObject() as {
+    const existingBill = existingBillDoc.toObject() as unknown as {
       _id: string;
       visit?: string;
       paymentMethod?: unknown;
@@ -86,6 +87,7 @@ export const PUT = withRouteLog("billing.medicine.billId.PUT", async (
     };
 
     const body = await req.json();
+    const generatedByName = String(body.generatedByName ?? "").trim() || session.user.name?.trim() || "";
     const items = Array.isArray(body.items) ? body.items : [];
     if (items.length === 0) {
       return NextResponse.json({ message: "At least one item is required" }, { status: 400 });
@@ -126,9 +128,12 @@ export const PUT = withRouteLog("billing.medicine.billId.PUT", async (
         return NextResponse.json({ message: "Validation failed" }, { status: 400 });
       }
 
-      const stock = await MedicineStock.findById(item.medicineStockId);
+      const stock = await MedicineStock.findOne({
+        _id: item.medicineStockId,
+        ...buildInventoryTypeQuery("pharmacy"),
+      });
       if (!stock) {
-        return NextResponse.json({ message: `Stock ${item.medicineStockId} not found` }, { status: 400 });
+        return NextResponse.json({ message: `Pharmacy stock ${item.medicineStockId} not found` }, { status: 400 });
       }
       const effectiveAvailable = stock.currentStock + (previousQtyByStock.get(String(stock._id)) ?? 0);
       if (effectiveAvailable < quantity) {
@@ -164,7 +169,10 @@ export const PUT = withRouteLog("billing.medicine.billId.PUT", async (
 
     for (const item of existingBill.items ?? []) {
       if (!item.medicineStock || !item.quantity) continue;
-      const stock = await MedicineStock.findById(item.medicineStock);
+      const stock = await MedicineStock.findOne({
+        _id: item.medicineStock,
+        ...buildInventoryTypeQuery("pharmacy"),
+      });
       if (!stock) continue;
 
       const prevQty = stock.currentStock;
@@ -176,6 +184,7 @@ export const PUT = withRouteLog("billing.medicine.billId.PUT", async (
       await StockTransaction.create({
         medicineStock: stock._id,
         medicine: stock.medicine,
+        inventoryType: stock.inventoryType ?? "pharmacy",
         transactionType: "in",
         quantity: item.quantity,
         previousQuantity: prevQty,
@@ -188,9 +197,12 @@ export const PUT = withRouteLog("billing.medicine.billId.PUT", async (
 
     for (const item of preparedItems) {
       const { stockId, quantity } = item;
-      const stock = await MedicineStock.findById(stockId);
+      const stock = await MedicineStock.findOne({
+        _id: stockId,
+        ...buildInventoryTypeQuery("pharmacy"),
+      });
       if (!stock) {
-        return NextResponse.json({ message: `Stock ${stockId} not found` }, { status: 400 });
+        return NextResponse.json({ message: `Pharmacy stock ${stockId} not found` }, { status: 400 });
       }
       const prevQty = stock.currentStock;
       stock.currentStock = prevQty - quantity;
@@ -201,6 +213,7 @@ export const PUT = withRouteLog("billing.medicine.billId.PUT", async (
       await StockTransaction.create({
         medicineStock: stock._id,
         medicine: stock.medicine,
+        inventoryType: stock.inventoryType ?? "pharmacy",
         transactionType: "out",
         quantity,
         previousQuantity: prevQty,
@@ -234,6 +247,7 @@ export const PUT = withRouteLog("billing.medicine.billId.PUT", async (
       billOffer: clampBillOffer(linesNetSum, billOfferRaw),
       grandTotal,
       billedAt: new Date(),
+      generatedByName,
       billedBy: (session.user as { id?: string }).id,
     };
     if (paymentMethodUpdate) setPayload.paymentMethod = paymentMethodUpdate;

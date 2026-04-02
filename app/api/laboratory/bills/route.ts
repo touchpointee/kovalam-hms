@@ -4,6 +4,8 @@ import mongoose from "mongoose";
 import { parseISO, startOfDay, endOfDay, isValid } from "date-fns";
 import { dbConnect } from "@/lib/mongoose";
 import { requireAuth, requireRole } from "@/lib/api-auth";
+import "@/models/Patient";
+import "@/models/User";
 import "@/models/PaymentMethod";
 import LabBill from "@/models/LabBill";
 import OPVisit from "@/models/OPVisit";
@@ -12,6 +14,7 @@ import "@/models/LabTest";
 import { syncLabBillForVisitItems } from "@/lib/sync-lab-bill";
 import { withRouteLog } from "@/lib/with-route-log";
 import { resolvePaymentMethodId } from "@/lib/payment-method";
+import { sendPushNotificationToLaboratory } from "@/lib/push";
 
 const postBodySchema = z.object({
   visitId: z.string().min(1),
@@ -24,6 +27,7 @@ const postBodySchema = z.object({
   ),
   billOffer: z.coerce.number().min(0).optional(),
   paymentMethodId: z.string().optional(),
+  generatedByName: z.string().optional(),
 });
 
 export const GET = withRouteLog("laboratory.bills.GET", async (req: NextRequest) => {
@@ -52,7 +56,7 @@ export const GET = withRouteLog("laboratory.bills.GET", async (req: NextRequest)
 
     const [rows, total] = await Promise.all([
       LabBill.find(filter)
-        .populate("patient", "name regNo age gender phone")
+        .populate("patient", "name regNo age gender phone address")
         .populate({
           path: "visit",
           select: "visitDate receiptNo",
@@ -110,6 +114,7 @@ export const POST = withRouteLog("laboratory.bills.POST", async (req: NextReques
     const patientId = String(visit.patient);
 
     const userId = (session!.user as { id?: string }).id;
+    const generatedByName = parsed.data.generatedByName?.trim() || session!.user.name?.trim() || "";
 
     let paymentMethodRef;
     const willHaveLines = items.length > 0;
@@ -124,11 +129,14 @@ export const POST = withRouteLog("laboratory.bills.POST", async (req: NextReques
       }
     }
 
+    const hadExistingBill = await LabBill.exists({ visit: visitId });
+
     await syncLabBillForVisitItems({
       patientId,
       visitId,
       items,
       sessionUserId: userId,
+      generatedByName,
       billOffer,
       ...(paymentMethodRef ? { paymentMethod: paymentMethodRef } : {}),
     });
@@ -140,7 +148,7 @@ export const POST = withRouteLog("laboratory.bills.POST", async (req: NextReques
     );
 
     const labBill = await LabBill.findOne({ visit: visitId })
-      .populate("patient", "name regNo age gender phone")
+      .populate("patient", "name regNo age gender phone address")
       .populate({
         path: "visit",
         select: "visitDate receiptNo",
@@ -150,6 +158,21 @@ export const POST = withRouteLog("laboratory.bills.POST", async (req: NextReques
       .populate("paymentMethod", "name code")
       .populate("items.labTest", "name price")
       .lean();
+
+    if (!hadExistingBill && labBill) {
+      const labBillId = String(labBill._id);
+      const patientName = (labBill.patient as { name?: string } | undefined)?.name ?? "Patient";
+      const receiptNo =
+        ((labBill.visit as { receiptNo?: string } | undefined)?.receiptNo ?? "").trim();
+      await sendPushNotificationToLaboratory({
+        title: "New Lab Bill Created",
+        body: receiptNo ? `${patientName} · Receipt ${receiptNo}` : patientName,
+        icon: "/hospital-logo.png",
+        url: "/laboratory/dashboard",
+        tag: `lab-bill-${labBillId}`,
+        labBillId,
+      });
+    }
 
     return NextResponse.json(labBill);
   } catch (e) {

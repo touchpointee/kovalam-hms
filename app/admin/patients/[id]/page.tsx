@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
 import { Trash2 } from "lucide-react";
@@ -35,6 +35,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { isValidMobileNumber, normalizeMobileNumber } from "@/lib/mobile";
 
 type Visit = {
   _id: string;
@@ -57,19 +58,21 @@ type PatientDetail = {
   visits?: Visit[];
 };
 
-function toDatetimeLocalValue(iso: string) {
-  const d = new Date(iso);
+function toDatetimeLocalValue(value: string | Date) {
+  const d = value instanceof Date ? value : new Date(value);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export default function AdminPatientDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params.id as string;
 
   const [patient, setPatient] = useState<PatientDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingPatient, setSavingPatient] = useState(false);
+  const [deletingPatient, setDeletingPatient] = useState(false);
 
   const [name, setName] = useState("");
   const [regNo, setRegNo] = useState("");
@@ -99,6 +102,10 @@ export default function AdminPatientDetailPage() {
     } catch {
       el.focus();
     }
+  }, []);
+
+  const setVisitDatetimeToNow = useCallback(() => {
+    setVDate(toDatetimeLocalValue(new Date()));
   }, []);
 
   const loadPatient = useCallback(async () => {
@@ -132,6 +139,11 @@ export default function AdminPatientDetailPage() {
 
   const savePatient = async () => {
     if (!id) return;
+    const normalizedPhone = normalizeMobileNumber(phone);
+    if (!isValidMobileNumber(normalizedPhone)) {
+      toast.error("Enter a valid 10-digit mobile number");
+      return;
+    }
     setSavingPatient(true);
     try {
       const res = await fetch(`/api/patients/${id}`, {
@@ -142,7 +154,7 @@ export default function AdminPatientDetailPage() {
           regNo: regNo.trim(),
           age: parseInt(age, 10),
           gender,
-          phone: phone.trim(),
+          phone: normalizedPhone,
           address: address.trim() || undefined,
           bloodGroup,
         }),
@@ -155,6 +167,30 @@ export default function AdminPatientDetailPage() {
       toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSavingPatient(false);
+    }
+  };
+
+  const deletePatient = async () => {
+    if (!id || !patient?._id) return;
+    if (
+      !window.confirm(
+        "Delete this patient permanently? All visits, prescriptions, procedure bills, medicine bills, and lab bills for this patient will be removed. Medicine stock from patient bills will be restored. This cannot be undone."
+      )
+    ) {
+      return;
+    }
+    setDeletingPatient(true);
+    try {
+      const res = await fetch(`/api/patients/${id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { message?: string }).message ?? "Failed to delete patient");
+      toast.success("Patient deleted");
+      router.push("/admin/patients");
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete patient");
+    } finally {
+      setDeletingPatient(false);
     }
   };
 
@@ -259,6 +295,16 @@ export default function AdminPatientDetailPage() {
           <Button asChild variant="outline">
             <Link href="/admin/patients">Back</Link>
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="border-destructive/40 text-destructive hover:bg-destructive/10"
+            disabled={savingPatient || deletingPatient}
+            onClick={() => void deletePatient()}
+          >
+            <Trash2 className="mr-1 h-4 w-4" aria-hidden />
+            {deletingPatient ? "Deleting…" : "Delete patient"}
+          </Button>
           <Button onClick={savePatient} disabled={savingPatient}>
             {savingPatient ? "Saving…" : "Save patient"}
           </Button>
@@ -304,7 +350,13 @@ export default function AdminPatientDetailPage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="phone">Phone</Label>
-            <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            <Input
+              id="phone"
+              inputMode="numeric"
+              maxLength={10}
+              value={phone}
+              onChange={(e) => setPhone(normalizeMobileNumber(e.target.value))}
+            />
           </div>
           <div className="space-y-2">
             <Label>Blood group</Label>
@@ -410,7 +462,12 @@ export default function AdminPatientDetailPage() {
           </DialogHeader>
           <div className="grid gap-3 py-2">
             <div className="space-y-2">
-              <Label htmlFor="vDate">Visit date & time</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="vDate">Visit date & time</Label>
+                <Button type="button" variant="outline" size="sm" onClick={setVisitDatetimeToNow}>
+                  Now
+                </Button>
+              </div>
               <Input
                 ref={visitDateInputRef}
                 id="vDate"
@@ -420,6 +477,9 @@ export default function AdminPatientDetailPage() {
                 onClick={openVisitDatetimePicker}
                 className="cursor-pointer"
               />
+              <p className="text-xs text-muted-foreground">
+                Use <span className="font-medium">Now</span> to set the current date and current time together.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="vReceipt">Receipt no.</Label>

@@ -12,6 +12,7 @@ import {
   Users,
   Stethoscope,
   Package,
+  Boxes,
   Factory,
   Tags,
   Truck,
@@ -82,6 +83,10 @@ const groupsByRole: Record<Role, NavGroup[]> = {
       items: [{ href: "/pharmacy/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> }],
     },
     {
+      title: "Inventory",
+      items: [{ href: "/pharmacy/stock", label: "Pharmacy Stock Management", icon: <Package className="h-4 w-4" /> }],
+    },
+    {
       title: "Sales",
       items: [{ href: "/pharmacy/billing", label: "Medicine Billing", icon: <ShoppingCart className="h-4 w-4" /> }],
     },
@@ -105,6 +110,7 @@ const groupsByRole: Record<Role, NavGroup[]> = {
         { href: "/admin/doctors", label: "Doctors", icon: <UserRound className="h-4 w-4" /> },
         { href: "/admin/procedures", label: "Procedures", icon: <Stethoscope className="h-4 w-4" /> },
         { href: "/admin/lab-tests", label: "Lab Tests", icon: <FlaskConical className="h-4 w-4" /> },
+        { href: "/admin/billing-staff", label: "Billing Staff", icon: <UserRound className="h-4 w-4" /> },
       ],
     },
     {
@@ -114,7 +120,8 @@ const groupsByRole: Record<Role, NavGroup[]> = {
         { href: "/admin/pharmacy/medicine-groups", label: "Medicine Groups", icon: <Tags className="h-4 w-4" /> },
         { href: "/admin/pharmacy/manufacturers", label: "Manufacturers", icon: <Factory className="h-4 w-4" /> },
         { href: "/admin/pharmacy/suppliers", label: "Suppliers", icon: <Truck className="h-4 w-4" /> },
-        { href: "/admin/pharmacy/stock", label: "Stock & Medicines", icon: <Package className="h-4 w-4" /> },
+        { href: "/admin/pharmacy/store-stock", label: "Store Stock Management", icon: <Boxes className="h-4 w-4" /> },
+        { href: "/admin/pharmacy/stock", label: "Pharmacy Stock Management", icon: <Package className="h-4 w-4" /> },
       ],
     },
     {

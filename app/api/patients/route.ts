@@ -7,12 +7,17 @@ import { getServerSession } from "next-auth";
 import Patient from "@/models/Patient";
 import { generateRegNo } from "@/lib/counters";
 import { withRouteLog } from "@/lib/with-route-log";
+import { isValidMobileNumber, normalizeMobileNumber } from "@/lib/mobile";
 
 const createSchema = z.object({
   name: z.string().min(1),
   age: z.number().min(0),
   gender: z.enum(["male", "female", "other"]),
-  phone: z.string().min(1),
+  phone: z
+    .string()
+    .min(1)
+    .transform((value) => normalizeMobileNumber(value))
+    .refine((value) => isValidMobileNumber(value), "Enter a valid 10-digit mobile number"),
   address: z.string().optional(),
   bloodGroup: z
     .enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "Unknown"])
@@ -75,6 +80,7 @@ export const POST = withRouteLog("patients.POST", async (req: NextRequest) => {
     const parsed = createSchema.safeParse({
       ...body,
       age: typeof body.age === "string" ? parseInt(body.age, 10) : body.age,
+      phone: normalizeMobileNumber(String(body.phone ?? "")),
     });
     if (!parsed.success) {
       return NextResponse.json({ message: "Validation failed", errors: parsed.error.flatten() }, { status: 400 });

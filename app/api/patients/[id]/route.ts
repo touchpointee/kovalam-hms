@@ -9,11 +9,15 @@ import OPVisit from "@/models/OPVisit";
 import Prescription from "@/models/Prescription";
 import ProcedureBill from "@/models/ProcedureBill";
 import MedicineBill from "@/models/MedicineBill";
+import LabBill from "@/models/LabBill";
+import MedicineStock from "@/models/MedicineStock";
+import StockTransaction from "@/models/StockTransaction";
 import "@/models/Medicine";
 import "@/models/Procedure";
 import "@/models/LabTest";
 import mongoose from "mongoose";
 import { withRouteLog } from "@/lib/with-route-log";
+import { isValidMobileNumber, normalizeMobileNumber } from "@/lib/mobile";
 
 export const GET = withRouteLog("patients.id.GET", async (
   _req: NextRequest,
@@ -33,7 +37,7 @@ export const GET = withRouteLog("patients.id.GET", async (
     if (!patient) return NextResponse.json({ message: "Patient not found" }, { status: 404 });
 
     const [visits, prescriptions, procedureBills, medicineBills] = await Promise.all([
-      OPVisit.find({ patient: id }).sort({ visitDate: -1 }).lean(),
+      OPVisit.find({ patient: id }).populate("doctor", "name").sort({ visitDate: -1 }).lean(),
       Prescription.find({ patient: id })
         .populate("visit doctor")
         .populate("medicines.medicine")
@@ -66,7 +70,11 @@ const updateSchema = z.object({
   regNo: z.string().min(1).optional(),
   age: z.number().min(0).optional(),
   gender: z.enum(["male", "female", "other"]).optional(),
-  phone: z.string().min(1).optional(),
+  phone: z
+    .string()
+    .transform((value) => normalizeMobileNumber(value))
+    .refine((value) => isValidMobileNumber(value), "Enter a valid 10-digit mobile number")
+    .optional(),
   address: z.string().optional(),
   bloodGroup: z.enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "Unknown"]).optional(),
 });
@@ -90,6 +98,7 @@ export const PUT = withRouteLog("patients.id.PUT", async (
     const parsed = updateSchema.safeParse({
       ...body,
       age: body.age !== undefined ? (typeof body.age === "string" ? parseInt(body.age, 10) : body.age) : undefined,
+      phone: body.phone !== undefined ? normalizeMobileNumber(String(body.phone)) : undefined,
     });
     if (!parsed.success) {
       return NextResponse.json({ message: "Validation failed" }, { status: 400 });
@@ -108,6 +117,81 @@ export const PUT = withRouteLog("patients.id.PUT", async (
     const patient = await Patient.findByIdAndUpdate(id, { $set: payload }, { new: true }).lean();
     if (!patient) return NextResponse.json({ message: "Patient not found" }, { status: 404 });
     return NextResponse.json(patient);
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json(
+      { message: e instanceof Error ? e.message : "Server error" },
+      { status: 500 }
+    );
+  }
+});
+
+export const DELETE = withRouteLog("patients.id.DELETE", async (
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) => {
+  try {
+    await dbConnect();
+    const { session, error } = await requireAuth();
+    if (error) return error;
+    const forbidden = requireRole(session!, ["admin"]);
+    if (forbidden) return forbidden;
+
+    const { id } = await params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ message: "Invalid ID" }, { status: 400 });
+    }
+
+    const patient = await Patient.findById(id).lean();
+    if (!patient) {
+      return NextResponse.json({ message: "Patient not found" }, { status: 404 });
+    }
+
+    const [visits, medicineBills] = await Promise.all([
+      OPVisit.find({ patient: id }).select("_id").lean(),
+      MedicineBill.find({ patient: id }).select("visit items").lean(),
+    ]);
+
+    const visitIds = visits.map((visit) => String(visit._id));
+    const restoreQtyByStock = new Map<string, number>();
+
+    for (const bill of medicineBills as Array<{
+      visit?: mongoose.Types.ObjectId;
+      items?: Array<{ medicineStock?: mongoose.Types.ObjectId; quantity?: number }>;
+    }>) {
+      for (const item of bill.items ?? []) {
+        if (!item.medicineStock || !item.quantity) continue;
+        const stockId = String(item.medicineStock);
+        restoreQtyByStock.set(stockId, (restoreQtyByStock.get(stockId) ?? 0) + Number(item.quantity || 0));
+      }
+    }
+
+    for (const [stockId, qtyToRestore] of Array.from(restoreQtyByStock.entries())) {
+      const stock = await MedicineStock.findById(stockId);
+      if (!stock) continue;
+      stock.currentStock += qtyToRestore;
+      stock.quantityOut = Math.max(0, stock.quantityOut - qtyToRestore);
+      stock.updatedAt = new Date();
+      await stock.save();
+    }
+
+    if (visitIds.length > 0) {
+      await StockTransaction.deleteMany({
+        referenceNumber: { $in: visitIds },
+        reason: { $in: ["Medicine bill generated", "Medicine bill updated", "Medicine bill edit restore"] },
+      });
+    }
+
+    await Promise.all([
+      Prescription.deleteMany({ patient: id }),
+      ProcedureBill.deleteMany({ patient: id }),
+      MedicineBill.deleteMany({ patient: id }),
+      LabBill.deleteMany({ patient: id }),
+      OPVisit.deleteMany({ patient: id }),
+      Patient.findByIdAndDelete(id),
+    ]);
+
+    return NextResponse.json({ ok: true });
   } catch (e) {
     console.error(e);
     return NextResponse.json(

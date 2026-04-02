@@ -157,7 +157,7 @@ export default function AdminDashboardPage() {
               </ul>
             )}
             <Button asChild variant="outline" size="sm" className="mt-2">
-              <Link href="/admin/pharmacy/stock">View Stock</Link>
+              <Link href="/admin/pharmacy/store-stock">View Store Stock</Link>
             </Button>
           </CardContent>
         </Card>

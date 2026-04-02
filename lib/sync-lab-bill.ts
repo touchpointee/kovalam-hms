@@ -18,10 +18,11 @@ export async function syncLabBillForVisitItems(args: {
   visitId: string;
   items: LabBillLineInput[];
   sessionUserId: string | undefined;
+  generatedByName?: string;
   billOffer?: number;
   paymentMethod?: mongoose.Types.ObjectId;
 }): Promise<void> {
-  const { patientId, visitId, items, sessionUserId, billOffer = 0, paymentMethod } = args;
+  const { patientId, visitId, items, sessionUserId, generatedByName, billOffer = 0, paymentMethod } = args;
   if (!sessionUserId) return;
 
   const normalized = items.filter((i) => i.labTestId && Number(i.quantity) > 0);
@@ -79,6 +80,7 @@ export async function syncLabBillForVisitItems(args: {
         items: billItems,
         billOffer: clampBillOffer(linesNetSum, billOffer),
         grandTotal,
+        ...(generatedByName?.trim() ? { generatedByName: generatedByName.trim() } : {}),
         billedBy: sessionUserId,
         updatedAt: new Date(),
         ...(paymentMethod ? { paymentMethod } : {}),

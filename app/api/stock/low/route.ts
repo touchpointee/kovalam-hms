@@ -5,8 +5,9 @@ import { getServerSession } from "next-auth";
 import { requireRole } from "@/lib/api-auth";
 import MedicineStock from "@/models/MedicineStock";
 import { withRouteLog } from "@/lib/with-route-log";
+import { buildInventoryTypeQuery, normalizeStockInventoryType } from "@/lib/stock";
 
-export const GET = withRouteLog("stock.low.GET", async () => {
+export const GET = withRouteLog("stock.low.GET", async (req: Request) => {
   try {
     await dbConnect();
     const session = await getServerSession(authOptions);
@@ -16,7 +17,12 @@ export const GET = withRouteLog("stock.low.GET", async () => {
     const forbidden = requireRole(session!, ["admin", "pharmacy"]);
     if (forbidden) return forbidden;
 
-    const batches = await MedicineStock.find({})
+    const { searchParams } = new URL(req.url);
+    const inventoryType = normalizeStockInventoryType(searchParams.get("inventoryType"));
+
+    const batches = await MedicineStock.find({
+      ...buildInventoryTypeQuery(inventoryType),
+    })
       .populate("medicine", "name unit")
       .sort({ expiryDate: 1 })
       .lean();

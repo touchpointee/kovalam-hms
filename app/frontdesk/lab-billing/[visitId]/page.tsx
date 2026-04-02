@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
 import { X } from "lucide-react";
-import { PrintLayout } from "@/components/PrintLayout";
+import { BillSignature, PrintLayout } from "@/components/PrintLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { formatCurrency, formatPaymentMethodLabel } from "@/lib/utils";
 import { PaymentMethodSelect } from "@/components/PaymentMethodSelect";
+import { BillingStaffSelect, getBillingStaffDisplayName } from "@/components/BillingStaffSelect";
 import {
   grandTotalAfterBillOffer,
   lineNetAfterOffer,
@@ -30,7 +31,7 @@ import {
 
 const visitListBackHref = "/frontdesk/lab-billing";
 
-type Patient = { _id: string; name: string; regNo: string };
+type Patient = { _id: string; name: string; regNo: string; phone?: string; age?: number; address?: string };
 type Visit = {
   _id: string;
   visitDate: string;
@@ -49,6 +50,8 @@ type LabBillItem = {
 type LabBill = {
   _id: string;
   billedAt?: string;
+  generatedByName?: string;
+  billedBy?: { name?: string } | null;
   grandTotal: number;
   billOffer?: number;
   patient?: Patient;
@@ -115,12 +118,14 @@ export default function FrontdeskLabBillingVisitPage() {
   const [editingBill, setEditingBill] = useState(false);
   const [billOffer, setBillOffer] = useState(0);
   const [paymentMethodId, setPaymentMethodId] = useState("");
+  const [generatedByName, setGeneratedByName] = useState("");
 
   const hydrateFromStoredBill = useCallback((stored: LabBill | null, cat: CatalogTest[]) => {
     setItems(itemsFromLabBill(stored, cat));
     setBillOffer(Number(stored?.billOffer) || 0);
     const pm = stored?.paymentMethod;
     setPaymentMethodId(pm?._id ? String(pm._id) : "");
+    setGeneratedByName(stored?.generatedByName?.trim() || "");
   }, []);
 
   useEffect(() => {
@@ -130,12 +135,35 @@ export default function FrontdeskLabBillingVisitPage() {
       fetch(`/api/visits/${visitId}`, { cache: "no-store" }).then((r) => r.json()),
       fetch("/api/lab-tests", { cache: "no-store" }).then((r) => r.json()),
     ])
-      .then(([visitData, labList]) => {
-        if (!visitData?._id || !visitData?.patient?._id) throw new Error("Visit not found");
-        setVisit(visitData as Visit);
+      .then(async ([visitData, labList]) => {
+        if (!visitData?._id) throw new Error("Visit not found");
+
+        let resolvedVisit = visitData as Visit;
+        const patientRef = visitData?.patient;
+        const patientId =
+          typeof patientRef === "string"
+            ? patientRef
+            : typeof patientRef === "object" && patientRef?._id
+              ? String(patientRef._id)
+              : "";
+
+        if (!resolvedVisit?.patient?._id && patientId) {
+          const patientRes = await fetch(`/api/patients/${patientId}`, { cache: "no-store" });
+          const patientData = await patientRes.json();
+          if (patientRes.ok && patientData?._id) {
+            resolvedVisit = {
+              ...resolvedVisit,
+              patient: patientData as Patient,
+            };
+          }
+        }
+
+        if (!resolvedVisit?.patient?._id) throw new Error("Lab billing details not found");
+
+        setVisit(resolvedVisit);
         const cat = Array.isArray(labList) ? labList : [];
         setCatalog(cat);
-        const stored = (visitData.labBill as LabBill | null) ?? null;
+        const stored = (resolvedVisit as Visit & { labBill?: LabBill | null }).labBill ?? null;
         const hasBill = Boolean(stored?.items?.length);
         setBill(hasBill ? stored : null);
         hydrateFromStoredBill(hasBill ? stored : null, cat);
@@ -247,6 +275,7 @@ export default function FrontdeskLabBillingVisitPage() {
         items: payload,
         ...(payload.length > 0 ? { billOffer: offerOnBill ?? 0 } : {}),
         ...(payload.length > 0 && pmId?.trim() ? { paymentMethodId: pmId.trim() } : {}),
+        ...(payload.length > 0 ? { generatedByName } : {}),
       }),
     });
     const data = await res.json();
@@ -257,6 +286,10 @@ export default function FrontdeskLabBillingVisitPage() {
   const saveBill = async () => {
     if (!visit?.patient?._id) {
       toast.error("Visit details missing");
+      return;
+    }
+    if (!generatedByName.trim()) {
+      toast.error("Select staff before generating the bill");
       return;
     }
     if (items.length === 0) {
@@ -313,6 +346,7 @@ export default function FrontdeskLabBillingVisitPage() {
     return (
       <PrintLayout
         title="Lab Bill"
+        paper="landscape"
         actions={
           <div className="flex items-center gap-2">
             <Button variant="default" onClick={() => window.print()}>
@@ -341,8 +375,12 @@ export default function FrontdeskLabBillingVisitPage() {
                 <span>: {bill.patient?.name ?? "-"}</span>
               </div>
               <div className="grid grid-cols-[120px_1fr]">
+                <span>Phone</span>
+                <span>: {bill.patient?.phone ?? "-"}</span>
+              </div>
+              <div className="grid grid-cols-[120px_1fr]">
                 <span>Address</span>
-                <span>: -</span>
+                <span>: {bill.patient?.address?.trim() || "-"}</span>
               </div>
             </div>
             <div className="space-y-2">
@@ -363,7 +401,7 @@ export default function FrontdeskLabBillingVisitPage() {
               </div>
               <div className="grid grid-cols-[150px_1fr]">
                 <span>Age</span>
-                <span>: -</span>
+                <span>: {bill.patient?.age ?? "-"}</span>
               </div>
               <div className="grid grid-cols-[150px_1fr]">
                 <span>Consultant Doctor</span>
@@ -413,33 +451,38 @@ export default function FrontdeskLabBillingVisitPage() {
             const linesNet = bill.items.reduce((s, r) => s + Number(r.totalPrice), 0);
             const bo = Number(bill.billOffer) || 0;
             return (
-              <div className="ml-auto grid w-[340px] grid-cols-[1fr_120px] gap-y-1 pt-8 text-[15px]">
-                <div className="border-b border-slate-300 py-1">Subtotal (gross)</div>
-                <div className="border-b border-slate-300 py-1 text-right">{formatCurrency(grossSum)}</div>
-                <div className="border-b border-slate-300 py-1">Line offers</div>
-                <div className="border-b border-slate-300 py-1 text-right text-red-700">
-                  {lineOfferSum > 0 ? `−${formatCurrency(lineOfferSum)}` : "—"}
+              <div className="pt-8">
+                <div className="ml-auto grid w-[340px] grid-cols-[1fr_120px] gap-y-1 text-[15px]">
+                  <div className="border-b border-slate-300 py-1">Subtotal (gross)</div>
+                  <div className="border-b border-slate-300 py-1 text-right">{formatCurrency(grossSum)}</div>
+                  <div className="border-b border-slate-300 py-1">Line offers</div>
+                  <div className="border-b border-slate-300 py-1 text-right text-red-700">
+                    {lineOfferSum > 0 ? `−${formatCurrency(lineOfferSum)}` : "—"}
+                  </div>
+                  <div className="border-b border-slate-300 py-1">After line offers</div>
+                  <div className="border-b border-slate-300 py-1 text-right">{formatCurrency(linesNet)}</div>
+                  {bo > 0 ? (
+                    <>
+                      <div className="border-b border-slate-300 py-1">Bill offer</div>
+                      <div className="border-b border-slate-300 py-1 text-right text-red-700">
+                        −{formatCurrency(bo)}
+                      </div>
+                    </>
+                  ) : null}
+                  {formatPaymentMethodLabel(bill.paymentMethod) ? (
+                    <>
+                      <div className="border-b border-slate-300 py-1">Payment method</div>
+                      <div className="border-b border-slate-300 py-1 text-right">
+                        {formatPaymentMethodLabel(bill.paymentMethod)}
+                      </div>
+                    </>
+                  ) : null}
+                  <div className="py-1 font-semibold">Net amount</div>
+                  <div className="py-1 text-right font-semibold">{formatCurrency(bill.grandTotal)}</div>
                 </div>
-                <div className="border-b border-slate-300 py-1">After line offers</div>
-                <div className="border-b border-slate-300 py-1 text-right">{formatCurrency(linesNet)}</div>
-                {bo > 0 ? (
-                  <>
-                    <div className="border-b border-slate-300 py-1">Bill offer</div>
-                    <div className="border-b border-slate-300 py-1 text-right text-red-700">
-                      −{formatCurrency(bo)}
-                    </div>
-                  </>
-                ) : null}
-                {formatPaymentMethodLabel(bill.paymentMethod) ? (
-                  <>
-                    <div className="border-b border-slate-300 py-1">Payment method</div>
-                    <div className="border-b border-slate-300 py-1 text-right">
-                      {formatPaymentMethodLabel(bill.paymentMethod)}
-                    </div>
-                  </>
-                ) : null}
-                <div className="py-1 font-semibold">Net amount</div>
-                <div className="py-1 text-right font-semibold">{formatCurrency(bill.grandTotal)}</div>
+                <BillSignature
+                  staffName={getBillingStaffDisplayName(bill.generatedByName) || bill.billedBy?.name?.trim()}
+                />
               </div>
             );
           })()}
@@ -581,6 +624,20 @@ export default function FrontdeskLabBillingVisitPage() {
                     <p className="text-xs text-muted-foreground">
                       Line totals after line offers: {formatCurrency(linesNetSum)}
                       {billOffer > 0 ? ` · After bill offer: ${formatCurrency(grandTotal)}` : ""}
+                    </p>
+                  </div>
+                  <div className="mt-4 flex max-w-md flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/80 p-4">
+                    <Label htmlFor="lab-generated-by">Name to show on bill</Label>
+                    <BillingStaffSelect
+                      id="lab-generated-by"
+                      label=""
+                      value={generatedByName}
+                      onValueChange={setGeneratedByName}
+                      className="max-w-[18rem]"
+                      triggerClassName="w-full max-w-[18rem]"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Prints as a small “Generated by” line on the bill.
                     </p>
                   </div>
                   <PaymentMethodSelect

@@ -1,3 +1,7 @@
 "use client";
 
-export { default } from "@/app/pharmacy/medicine-groups/page";
+import PharmacyMedicineGroupsPage from "@/app/pharmacy/medicine-groups/page";
+
+export default function AdminMedicineGroupsPage() {
+  return <PharmacyMedicineGroupsPage />;
+}

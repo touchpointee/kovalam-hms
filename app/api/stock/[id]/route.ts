@@ -63,6 +63,7 @@ export const PUT = withRouteLog("stock.id.PUT", async (
     await StockTransaction.create({
       medicineStock: stock._id,
       medicine: stock.medicine,
+      inventoryType: stock.inventoryType ?? "store",
       transactionType: parsed.data.transactionType,
       quantity: parsed.data.quantity,
       previousQuantity: prevQty,

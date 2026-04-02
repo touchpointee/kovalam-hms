@@ -1,3 +1,7 @@
 "use client";
 
-export { default } from "@/app/frontdesk/procedure-billing/[visitId]/page";
+import FrontdeskProcedureBillingPage from "@/app/frontdesk/procedure-billing/[visitId]/page";
+
+export default function AdminProcedureBillingPage() {
+  return <FrontdeskProcedureBillingPage />;
+}
