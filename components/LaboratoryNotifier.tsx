@@ -234,7 +234,7 @@ export function LaboratoryNotifier() {
       await playNotificationSound(settingsRef.current);
     };
 
-    navigator.serviceWorker.addEventListener("message", onServiceWorkerMessage);
+    navigator.serviceWorker?.addEventListener("message", onServiceWorkerMessage);
 
     const notifyForLatestBill = async () => {
       try {
@@ -276,7 +276,7 @@ export function LaboratoryNotifier() {
     return () => {
       window.clearInterval(interval);
       window.removeEventListener("focus", onFocus);
-      navigator.serviceWorker.removeEventListener("message", onServiceWorkerMessage);
+      navigator.serviceWorker?.removeEventListener("message", onServiceWorkerMessage);
     };
   }, [router]);
 
