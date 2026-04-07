@@ -43,7 +43,9 @@ export default function AdminDashboardPage() {
         setMedicineTotal(data.medicineSummary?.totalAmount ?? 0);
         setExpenseTotal(data.expenseSummary?.total ?? 0);
       }),
-      fetch("/api/patients?limit=10").then((r) => r.json()).then((d) => setRecentPatients(d.patients ?? [])),
+      fetch("/api/patients?limit=10&registrationType=op")
+        .then((r) => r.json())
+        .then((d) => setRecentPatients(d.patients ?? [])),
       fetch("/api/expenses?from=2020-01-01&to=2030-12-31").then((r) => r.json()).then((d) => setRecentExpenses((d.expenses ?? []).slice(0, 5))),
       fetch("/api/stock/low", { cache: "no-store" })
         .then((r) => r.json())

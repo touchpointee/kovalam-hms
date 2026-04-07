@@ -494,7 +494,7 @@ export default function VisitPage() {
 
   const doSearch = () => {
     if (!search.trim()) return;
-    fetch(`/api/patients?search=${encodeURIComponent(search)}&limit=10`)
+    fetch(`/api/patients?search=${encodeURIComponent(search)}&limit=10&registrationType=op`)
       .then((res) => res.json())
       .then((data) => setResults(data.patients ?? []))
       .catch(() => setResults([]));

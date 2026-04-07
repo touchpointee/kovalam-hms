@@ -5,7 +5,7 @@ import { requireAuth, requireRole, type Role } from "@/lib/api-auth";
 import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import Patient from "@/models/Patient";
-import { generateRegNo } from "@/lib/counters";
+import { generateLabRegNo, generateRegNo } from "@/lib/counters";
 import { withRouteLog } from "@/lib/with-route-log";
 import { isValidMobileNumber, normalizeMobileNumber } from "@/lib/mobile";
 
@@ -22,6 +22,7 @@ const createSchema = z.object({
   bloodGroup: z
     .enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "Unknown"])
     .optional(),
+  registrationType: z.enum(["op", "lab"]).optional(),
 });
 
 export const GET = withRouteLog("patients.GET", async (req: NextRequest) => {
@@ -37,15 +38,40 @@ export const GET = withRouteLog("patients.GET", async (req: NextRequest) => {
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get("limit") ?? "10", 10)));
     const skip = (page - 1) * limit;
 
-    const filter: Record<string, unknown> = {};
+    const andFilters: Array<Record<string, unknown>> = [];
     if (search.trim()) {
       const re = new RegExp(search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-      filter.$or = [
-        { name: re },
-        { phone: re },
-        { regNo: re },
-      ];
+      andFilters.push({
+        $or: [
+          { name: re },
+          { phone: re },
+          { regNo: re },
+        ],
+      });
     }
+    const registrationType = searchParams.get("registrationType");
+    if (registrationType === "lab") {
+      andFilters.push({
+        $or: [
+          { registrationType: "lab" },
+          { regNo: new RegExp("^LAB\\d+$") },
+        ],
+      });
+    } else if (registrationType === "op") {
+      andFilters.push({
+        $and: [
+          {
+            $or: [
+              { registrationType: "op" },
+              { registrationType: { $exists: false } },
+            ],
+          },
+          { regNo: { $not: new RegExp("^LAB\\d+$") } },
+        ],
+      });
+    }
+    const filter: Record<string, unknown> =
+      andFilters.length === 0 ? {} : andFilters.length === 1 ? andFilters[0] : { $and: andFilters };
 
     const [patients, total] = await Promise.all([
       Patient.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
@@ -86,8 +112,9 @@ export const POST = withRouteLog("patients.POST", async (req: NextRequest) => {
       return NextResponse.json({ message: "Validation failed", errors: parsed.error.flatten() }, { status: 400 });
     }
 
-    const regNo = await generateRegNo();
-    const patient = await Patient.create({ ...parsed.data, regNo });
+    const registrationType = parsed.data.registrationType ?? "op";
+    const regNo = registrationType === "lab" ? await generateLabRegNo() : await generateRegNo();
+    const patient = await Patient.create({ ...parsed.data, registrationType, regNo });
     return NextResponse.json(patient.toJSON());
   } catch (e) {
     console.error(e);

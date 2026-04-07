@@ -77,7 +77,7 @@ export default function FrontdeskProcedureBillingPage() {
                     <TableCell className="capitalize">{visit.status ?? "waiting"}</TableCell>
                     <TableCell>
                       {(visit.procedureBills?.length ?? 0) > 0 ? (
-                        <Badge className="bg-emerald-600">Billed</Badge>
+                        <Badge className="bg-red-600 text-white">Billed</Badge>
                       ) : (
                         <Badge variant="outline">Pending</Badge>
                       )}

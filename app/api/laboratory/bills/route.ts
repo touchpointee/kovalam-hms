@@ -11,13 +11,17 @@ import LabBill from "@/models/LabBill";
 import OPVisit from "@/models/OPVisit";
 import Prescription from "@/models/Prescription";
 import "@/models/LabTest";
+import LabTest from "@/models/LabTest";
+import Patient from "@/models/Patient";
 import { syncLabBillForVisitItems } from "@/lib/sync-lab-bill";
 import { withRouteLog } from "@/lib/with-route-log";
 import { resolvePaymentMethodId } from "@/lib/payment-method";
 import { sendPushNotificationToLaboratory } from "@/lib/push";
+import { clampBillOffer, clampLineOffer, grandTotalAfterBillOffer, lineNetAfterOffer } from "@/lib/bill-offers";
 
 const postBodySchema = z.object({
-  visitId: z.string().min(1),
+  visitId: z.string().min(1).optional(),
+  patientId: z.string().min(1).optional(),
   items: z.array(
     z.object({
       labTestId: z.string().min(1),
@@ -28,6 +32,8 @@ const postBodySchema = z.object({
   billOffer: z.coerce.number().min(0).optional(),
   paymentMethodId: z.string().optional(),
   generatedByName: z.string().optional(),
+}).refine((data) => Boolean(data.visitId || data.patientId), {
+  message: "visitId or patientId required",
 });
 
 export const GET = withRouteLog("laboratory.bills.GET", async (req: NextRequest) => {
@@ -52,6 +58,13 @@ export const GET = withRouteLog("laboratory.bills.GET", async (req: NextRequest)
         return NextResponse.json({ message: "Invalid from or to date" }, { status: 400 });
       }
       filter = { billedAt: { $gte: from, $lte: to } };
+    }
+    const patientId = req.nextUrl.searchParams.get("patientId");
+    if (patientId) {
+      if (!mongoose.Types.ObjectId.isValid(patientId)) {
+        return NextResponse.json({ message: "Invalid patient id" }, { status: 400 });
+      }
+      filter.patient = patientId;
     }
 
     const [rows, total] = await Promise.all([
@@ -102,16 +115,30 @@ export const POST = withRouteLog("laboratory.bills.POST", async (req: NextReques
       return NextResponse.json({ message: "Validation failed" }, { status: 400 });
     }
 
-    const { visitId, items, billOffer, paymentMethodId } = parsed.data;
-    if (!mongoose.Types.ObjectId.isValid(visitId)) {
-      return NextResponse.json({ message: "Invalid visit id" }, { status: 400 });
+    const { visitId, patientId: rawPatientId, items, billOffer, paymentMethodId } = parsed.data;
+    let patientId = "";
+    let visitRef: string | null = null;
+    if (visitId) {
+      if (!mongoose.Types.ObjectId.isValid(visitId)) {
+        return NextResponse.json({ message: "Invalid visit id" }, { status: 400 });
+      }
+      const visit = (await OPVisit.findById(visitId).lean()) as { patient?: unknown } | null;
+      if (!visit?.patient) {
+        return NextResponse.json({ message: "Visit not found" }, { status: 404 });
+      }
+      patientId = String(visit.patient);
+      visitRef = visitId;
+    } else if (rawPatientId) {
+      if (!mongoose.Types.ObjectId.isValid(rawPatientId)) {
+        return NextResponse.json({ message: "Invalid patient id" }, { status: 400 });
+      }
+      const patient = (await Patient.findById(rawPatientId).select("_id").lean()) as { _id?: unknown } | null;
+      if (!patient?._id) {
+        return NextResponse.json({ message: "Patient not found" }, { status: 404 });
+      }
+      patientId = String(patient._id);
+      visitRef = null;
     }
-
-    const visit = (await OPVisit.findById(visitId).lean()) as { patient?: unknown } | null;
-    if (!visit?.patient) {
-      return NextResponse.json({ message: "Visit not found" }, { status: 404 });
-    }
-    const patientId = String(visit.patient);
 
     const userId = (session!.user as { id?: string }).id;
     const generatedByName = parsed.data.generatedByName?.trim() || session!.user.name?.trim() || "";
@@ -129,35 +156,96 @@ export const POST = withRouteLog("laboratory.bills.POST", async (req: NextReques
       }
     }
 
-    const hadExistingBill = await LabBill.exists({ visit: visitId });
+    let hadExistingBill = false;
+    let labBill = null;
+    if (visitRef) {
+      hadExistingBill = !!(await LabBill.exists({ visit: visitRef }));
 
-    await syncLabBillForVisitItems({
-      patientId,
-      visitId,
-      items,
-      sessionUserId: userId,
-      generatedByName,
-      billOffer,
-      ...(paymentMethodRef ? { paymentMethod: paymentMethodRef } : {}),
-    });
+      await syncLabBillForVisitItems({
+        patientId,
+        visitId: visitRef,
+        items,
+        sessionUserId: userId,
+        generatedByName,
+        billOffer,
+        ...(paymentMethodRef ? { paymentMethod: paymentMethodRef } : {}),
+      });
 
-    const uniqLabIds = items.length === 0 ? [] : Array.from(new Set(items.map((i) => i.labTestId)));
-    await Prescription.updateOne(
-      { patient: patientId, visit: visitId },
-      { $set: { labTests: uniqLabIds, updatedAt: new Date() } }
-    );
+      const uniqLabIds = items.length === 0 ? [] : Array.from(new Set(items.map((i) => i.labTestId)));
+      await Prescription.updateOne(
+        { patient: patientId, visit: visitRef },
+        { $set: { labTests: uniqLabIds, updatedAt: new Date() } }
+      );
 
-    const labBill = await LabBill.findOne({ visit: visitId })
-      .populate("patient", "name regNo age gender phone address")
-      .populate({
-        path: "visit",
-        select: "visitDate receiptNo",
-        populate: { path: "doctor", select: "name" },
-      })
-      .populate("billedBy", "name")
-      .populate("paymentMethod", "name code")
-      .populate("items.labTest", "name price")
-      .lean();
+      labBill = await LabBill.findOne({ visit: visitRef })
+        .populate("patient", "name regNo age gender phone address")
+        .populate({
+          path: "visit",
+          select: "visitDate receiptNo",
+          populate: { path: "doctor", select: "name" },
+        })
+        .populate("billedBy", "name")
+        .populate("paymentMethod", "name code")
+        .populate("items.labTest", "name price")
+        .lean();
+    } else {
+      const labOnlyFilter = {
+        patient: patientId,
+        $or: [{ visit: { $exists: false } }, { visit: null }],
+      };
+      hadExistingBill = !!(await LabBill.exists(labOnlyFilter));
+
+      if (items.length === 0) {
+        await LabBill.deleteOne(labOnlyFilter);
+        labBill = null;
+      } else {
+        const ids = Array.from(new Set(items.map((i) => i.labTestId)));
+        const tests = (await LabTest.find({ _id: { $in: ids } }).lean()) as Array<{
+          _id: mongoose.Types.ObjectId;
+          name?: string;
+          price?: number;
+        }>;
+        const testById = new Map(tests.map((t) => [String(t._id), t]));
+        const billItems = items.map((row) => {
+          const t = testById.get(row.labTestId);
+          const unit = Number(t?.price) || 0;
+          const qty = Math.max(1, Number(row.quantity) || 1);
+          const gross = unit * qty;
+          const lineOffer = clampLineOffer(gross, Number(row.lineOffer) || 0);
+          return {
+            labTest: t?._id ?? row.labTestId,
+            labTestName: t?.name ?? "Lab Test",
+            quantity: qty,
+            unitPrice: unit,
+            lineOffer,
+            totalPrice: lineNetAfterOffer(gross, lineOffer),
+          };
+        });
+        const linesNetSum = billItems.reduce((s, r) => s + Number(r.totalPrice || 0), 0);
+        const grandTotal = grandTotalAfterBillOffer(linesNetSum, billOffer ?? 0);
+        const updateDoc: Record<string, unknown> = {
+          patient: patientId,
+          items: billItems,
+          billOffer: clampBillOffer(linesNetSum, billOffer ?? 0),
+          grandTotal,
+          generatedByName,
+          billedBy: userId,
+          billedAt: new Date(),
+          updatedAt: new Date(),
+          ...(paymentMethodRef ? { paymentMethod: paymentMethodRef } : {}),
+        };
+        labBill = await LabBill.findOneAndUpdate(
+          labOnlyFilter,
+          { $set: updateDoc, $unset: { visit: "" } },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        )
+          .populate("patient", "name regNo age gender phone address")
+          .populate("billedBy", "name")
+          .populate("paymentMethod", "name code")
+          .populate("items.labTest", "name price")
+          .lean();
+      }
+    }
 
     if (!hadExistingBill && labBill) {
       const labBillId = String(labBill._id);
@@ -166,7 +254,7 @@ export const POST = withRouteLog("laboratory.bills.POST", async (req: NextReques
         ((labBill.visit as { receiptNo?: string } | undefined)?.receiptNo ?? "").trim();
       await sendPushNotificationToLaboratory({
         title: "New Lab Bill Created",
-        body: receiptNo ? `${patientName} · Receipt ${receiptNo}` : patientName,
+        body: receiptNo ? `${patientName} - Receipt ${receiptNo}` : patientName,
         icon: "/hospital-logo.png",
         url: "/laboratory/dashboard",
         tag: `lab-bill-${labBillId}`,

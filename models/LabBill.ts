@@ -17,7 +17,7 @@ const labBillItemSchema = new mongoose.Schema(
 const labBillSchema = new mongoose.Schema(
   {
     patient: { type: mongoose.Schema.Types.ObjectId, ref: "Patient", required: true },
-    visit: { type: mongoose.Schema.Types.ObjectId, ref: "OPVisit", required: true, unique: true },
+    visit: { type: mongoose.Schema.Types.ObjectId, ref: "OPVisit", unique: true, sparse: true },
     items: [labBillItemSchema],
     /** Extra amount off the bill after line offers (currency). */
     billOffer: { type: Number, default: 0 },

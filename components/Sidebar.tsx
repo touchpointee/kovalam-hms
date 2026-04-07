@@ -53,6 +53,7 @@ const groupsByRole: Record<Role, NavGroup[]> = {
       title: "Patients & visits",
       items: [
         { href: "/frontdesk/register", label: "Register Patient", icon: <UserPlus className="h-4 w-4" /> },
+        { href: "/frontdesk/lab-registration", label: "Lab Registration", icon: <FlaskConical className="h-4 w-4" /> },
         { href: "/frontdesk/visit", label: "New Visit", icon: <ClipboardList className="h-4 w-4" /> },
       ],
     },
@@ -107,6 +108,7 @@ const groupsByRole: Record<Role, NavGroup[]> = {
       items: [
         { href: "/admin/visits", label: "OP visit", icon: <CalendarDays className="h-4 w-4" /> },
         { href: "/admin/patients", label: "Patients", icon: <Users className="h-4 w-4" /> },
+        { href: "/admin/lab-registrations", label: "Lab Registrations", icon: <FlaskConical className="h-4 w-4" /> },
         { href: "/admin/doctors", label: "Doctors", icon: <UserRound className="h-4 w-4" /> },
         { href: "/admin/procedures", label: "Procedures", icon: <Stethoscope className="h-4 w-4" /> },
         { href: "/admin/lab-tests", label: "Lab Tests", icon: <FlaskConical className="h-4 w-4" /> },

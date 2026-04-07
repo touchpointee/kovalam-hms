@@ -3,19 +3,28 @@ import Patient from "@/models/Patient";
 import OPVisit from "@/models/OPVisit";
 
 const REG_NO_PREFIX = "DMC";
+const LAB_REG_NO_PREFIX = "LAB";
 
 export async function generateRegNo(): Promise<string> {
+  return generateRegNoWithPrefix(REG_NO_PREFIX);
+}
+
+export async function generateLabRegNo(): Promise<string> {
+  return generateRegNoWithPrefix(LAB_REG_NO_PREFIX);
+}
+
+async function generateRegNoWithPrefix(prefix: string): Promise<string> {
   await dbConnect();
-  const docs = (await Patient.find({ regNo: new RegExp(`^${REG_NO_PREFIX}\\d+$`) })
+  const docs = (await Patient.find({ regNo: new RegExp(`^${prefix}\\d+$`) })
     .select("regNo")
     .lean()) as { regNo?: string }[];
   let max = 0;
   for (const d of docs) {
-    const m = d.regNo?.match(new RegExp(`^${REG_NO_PREFIX}(\\d+)$`));
+    const m = d.regNo?.match(new RegExp(`^${prefix}(\\d+)$`));
     if (m) max = Math.max(max, parseInt(m[1], 10));
   }
   const next = max + 1;
-  return `${REG_NO_PREFIX}${String(next).padStart(3, "0")}`;
+  return `${prefix}${String(next).padStart(3, "0")}`;
 }
 
 export async function generateReceiptNo(): Promise<string> {

@@ -32,6 +32,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Visit = {
   _id: string;
@@ -67,6 +74,10 @@ type PatientDetail = {
 type ProcedureOption = { _id: string; name: string; price?: number };
 
 type LabTestOption = { _id: string; name: string; price?: number };
+
+type DoctorOption = { _id: string; name: string };
+
+type MedicineOption = { _id: string; name: string; genericName?: string };
 
 type MedRow = {
   medicine?: string;
@@ -271,6 +282,13 @@ export default function FrontdeskPatientDetailPage() {
   const [consultationFee, setConsultationFee] = useState("0");
   const [medicineRows, setMedicineRows] = useState<MedRow[]>([emptyMedRow()]);
   const [notes, setNotes] = useState("");
+  const [allDoctors, setAllDoctors] = useState<DoctorOption[]>([]);
+  const [selectedDoctorId, setSelectedDoctorId] = useState("");
+  // Per-row medicine search state
+  const [medSearchStates, setMedSearchStates] = useState<
+    { suggestions: MedicineOption[]; open: boolean }[]
+  >([{ suggestions: [], open: false }]);
+  const medSearchTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const visitDateInputRef = useRef<HTMLInputElement>(null);
   const visitDialogBodyRef = useRef<HTMLDivElement>(null);
   /** Synchronous guard — `disabled={savingVisit}` alone can miss rapid double-clicks before re-render. */
@@ -343,6 +361,16 @@ export default function FrontdeskPatientDetailPage() {
       .catch(() => setAllLabTests([]));
   }, []);
 
+  useEffect(() => {
+    fetch("/api/doctors", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data) => {
+        const list: DoctorOption[] = Array.isArray(data) ? data : (data?.users ?? []);
+        setAllDoctors(list);
+      })
+      .catch(() => setAllDoctors([]));
+  }, []);
+
   const visits = useMemo(() => patient?.visits ?? [], [patient]);
 
   const applyVisitToPrintState = useCallback((visitData: PrintableVisit) => {
@@ -361,6 +389,8 @@ export default function FrontdeskPatientDetailPage() {
     setSelectedLabTestIds([]);
     setMedicineRows([emptyMedRow()]);
     setNotes("");
+    setSelectedDoctorId("");
+    setMedSearchStates([{ suggestions: [], open: false }]);
   };
 
   const openCreateVisit = () => {
@@ -388,6 +418,8 @@ export default function FrontdeskPatientDetailPage() {
     setConsultationFee(
       visit.opCharge != null && Number.isFinite(visit.opCharge) ? String(visit.opCharge) : "0"
     );
+    const rawDoctor = visit.doctor as { _id?: string } | null | undefined;
+    setSelectedDoctorId(rawDoctor?._id ? String(rawDoctor._id) : "");
     setVisitDialogOpen(true);
   };
 
@@ -612,10 +644,11 @@ export default function FrontdeskPatientDetailPage() {
     const wasEditing = !!editingVisit?._id;
     try {
       const opCharge = consultationAmount;
-      const payload = {
+      const payload: Record<string, unknown> = {
         visitDate: new Date(vDate).toISOString(),
         status: editingVisit?._id ? (editingVisit.status ?? "waiting") : "served",
         opCharge,
+        ...(selectedDoctorId ? { doctorId: selectedDoctorId } : {}),
       };
       const endpoint = editingVisit?._id
         ? `/api/visits/${editingVisit._id}`
@@ -932,6 +965,21 @@ export default function FrontdeskPatientDetailPage() {
                 </p>
               </div>
               <div className="space-y-2">
+                <Label htmlFor="visitDoctor">Consulting doctor</Label>
+                <Select value={selectedDoctorId} onValueChange={setSelectedDoctorId}>
+                  <SelectTrigger id="visitDoctor" className="max-w-xs">
+                    <SelectValue placeholder="Select a doctor (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allDoctors.map((d) => (
+                      <SelectItem key={d._id} value={d._id}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="consultationFee">Consultation fee (OP charge)</Label>
                 <Input
                   id="consultationFee"
@@ -1066,7 +1114,10 @@ export default function FrontdeskPatientDetailPage() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => setMedicineRows((rows) => [...rows, emptyMedRow()])}
+                    onClick={() => {
+                      setMedicineRows((rows) => [...rows, emptyMedRow()]);
+                      setMedSearchStates((prev) => [...prev, { suggestions: [], open: false }]);
+                    }}
                   >
                     Add row
                   </Button>
@@ -1075,19 +1126,70 @@ export default function FrontdeskPatientDetailPage() {
                   Enter medicine name, optional line fee (estimate), and dosage / frequency / duration.
                 </p>
                 <div className="space-y-3">
-                  {medicineRows.map((row, idx) => (
+                  {medicineRows.map((row, idx) => {
+                    const ms = medSearchStates[idx] ?? { suggestions: [], open: false };
+                    const updateMs = (patch: Partial<typeof ms>) =>
+                      setMedSearchStates((prev) => {
+                        const next = [...prev];
+                        next[idx] = { ...ms, ...patch };
+                        return next;
+                      });
+                    const handleMedSearch = (q: string) => {
+                      // update row.medicineName as the single source of truth
+                      setMedicineRows((rows) =>
+                        rows.map((r, i) => (i === idx ? { ...r, medicineName: q, medicine: undefined } : r))
+                      );
+                      // debounce API call
+                      if (medSearchTimers.current[idx]) clearTimeout(medSearchTimers.current[idx]);
+                      if (!q.trim()) { updateMs({ suggestions: [], open: false }); return; }
+                      updateMs({ open: true });
+                      medSearchTimers.current[idx] = setTimeout(() => {
+                        fetch(`/api/medicines?search=${encodeURIComponent(q.trim())}`, { cache: "no-store" })
+                          .then((r) => r.json())
+                          .then((data: MedicineOption[]) => updateMs({ suggestions: Array.isArray(data) ? data.slice(0, 10) : [] }))
+                          .catch(() => {});
+                      }, 250);
+                    };
+                    const pickMedicine = (med: MedicineOption) => {
+                      setMedicineRows((rows) =>
+                        rows.map((r, i) =>
+                          i === idx ? { ...r, medicine: med._id, medicineName: med.name } : r
+                        )
+                      );
+                      updateMs({ suggestions: [], open: false });
+                    };
+                    return (
                     <div key={idx} className="rounded-md border p-3 space-y-2">
                       <div className="flex flex-wrap gap-2">
-                        <Input
-                          placeholder="Medicine name *"
-                          value={row.medicineName}
-                          onChange={(e) =>
-                            setMedicineRows((rows) =>
-                              rows.map((r, i) => (i === idx ? { ...r, medicineName: e.target.value } : r))
-                            )
-                          }
-                          className="min-w-[8rem] flex-1"
-                        />
+                        {/* Medicine name with search dropdown */}
+                        <div className="relative min-w-[8rem] flex-1">
+                          <Input
+                            placeholder="Search medicine or type name *"
+                            value={row.medicineName}
+                            onChange={(e) => handleMedSearch(e.target.value)}
+                            onFocus={() => { if (row.medicineName.trim()) updateMs({ open: true }); }}
+                            onBlur={() => setTimeout(() => updateMs({ open: false }), 150)}
+                            className="w-full"
+                            autoComplete="off"
+                          />
+                          {ms.open && ms.suggestions.length > 0 && (
+                            <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border bg-white shadow-lg">
+                              {ms.suggestions.map((med) => (
+                                <button
+                                  key={med._id}
+                                  type="button"
+                                  className="flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                  onMouseDown={(e) => { e.preventDefault(); pickMedicine(med); }}
+                                >
+                                  <span className="font-medium">{med.name}</span>
+                                  {med.genericName && (
+                                    <span className="text-xs text-muted-foreground">{med.genericName}</span>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                         <Input
                           type="number"
                           min={0}
@@ -1108,9 +1210,10 @@ export default function FrontdeskPatientDetailPage() {
                             variant="ghost"
                             size="sm"
                             className="shrink-0"
-                            onClick={() =>
-                              setMedicineRows((rows) => rows.filter((_, i) => i !== idx))
-                            }
+                            onClick={() => {
+                              setMedicineRows((rows) => rows.filter((_, i) => i !== idx));
+                              setMedSearchStates((prev) => prev.filter((_, i) => i !== idx));
+                            }}
                           >
                             Remove
                           </Button>
@@ -1155,7 +1258,8 @@ export default function FrontdeskPatientDetailPage() {
                         }
                       />
                     </div>
-                  ))}
+                    );
+                  })}
                   <div className="flex justify-between rounded-md border bg-slate-50/80 px-3 py-2 text-sm font-semibold">
                     <span>Medicines subtotal {!medicineRows.some((r) => r.medicineName.trim()) && "(add names)"}</span>
                     <span className="tabular-nums">{formatCurrency(medicineFeesTotal)}</span>

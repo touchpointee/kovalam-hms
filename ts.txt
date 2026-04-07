@@ -1,0 +1,8 @@
+﻿app/api/laboratory/bills/route.ts(136,21): error TS2339: Property '_id' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[] | (FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })'.
+  Property '_id' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[]'.
+app/api/laboratory/bills/route.ts(139,34): error TS2339: Property '_id' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[] | (FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })'.
+  Property '_id' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[]'.
+app/api/laboratory/bills/route.ts(162,7): error TS2322: Type '{ _id: ObjectId; } | null' is not assignable to type 'boolean'.
+  Type 'null' is not assignable to type 'boolean'.
+app/api/laboratory/bills/route.ts(196,7): error TS2322: Type '{ _id: ObjectId; } | null' is not assignable to type 'boolean'.
+  Type 'null' is not assignable to type 'boolean'.

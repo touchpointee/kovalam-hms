@@ -357,6 +357,12 @@ export default function ReportsPage({
                       <TableCell>{formatCurrency(v.opCharge)}</TableCell>
                     </TableRow>
                   ))}
+                  {report.opVisits.length > 0 ? (
+                    <TableRow className="bg-slate-50 font-semibold">
+                      <TableCell colSpan={4} className="text-right">Grand total</TableCell>
+                      <TableCell>{formatCurrency(report.opSummary.totalAmount)}</TableCell>
+                    </TableRow>
+                  ) : null}
                 </TableBody>
               </Table>
             </CardContent>
@@ -383,6 +389,12 @@ export default function ReportsPage({
                       <TableCell>{formatCurrency(b.grandTotal)}</TableCell>
                     </TableRow>
                   ))}
+                  {report.procedureBills.length > 0 ? (
+                    <TableRow className="bg-slate-50 font-semibold">
+                      <TableCell colSpan={2} className="text-right">Grand total</TableCell>
+                      <TableCell>{formatCurrency(report.procedureSummary.totalAmount)}</TableCell>
+                    </TableRow>
+                  ) : null}
                 </TableBody>
               </Table>
             </CardContent>
@@ -409,6 +421,12 @@ export default function ReportsPage({
                       <TableCell>{formatCurrency(b.grandTotal)}</TableCell>
                     </TableRow>
                   ))}
+                  {report.medicineBills.length > 0 ? (
+                    <TableRow className="bg-slate-50 font-semibold">
+                      <TableCell colSpan={2} className="text-right">Grand total</TableCell>
+                      <TableCell>{formatCurrency(report.medicineSummary.totalAmount)}</TableCell>
+                    </TableRow>
+                  ) : null}
                 </TableBody>
               </Table>
             </CardContent>
@@ -435,6 +453,12 @@ export default function ReportsPage({
                       <TableCell>{formatCurrency(b.grandTotal)}</TableCell>
                     </TableRow>
                   ))}
+                  {report.labBills.length > 0 ? (
+                    <TableRow className="bg-slate-50 font-semibold">
+                      <TableCell colSpan={2} className="text-right">Grand total</TableCell>
+                      <TableCell>{formatCurrency(report.labSummary.totalAmount)}</TableCell>
+                    </TableRow>
+                  ) : null}
                 </TableBody>
               </Table>
             </CardContent>
@@ -463,6 +487,12 @@ export default function ReportsPage({
                       <TableCell>{formatCurrency(e.amount)}</TableCell>
                     </TableRow>
                   ))}
+                  {report.expenses.length > 0 ? (
+                    <TableRow className="bg-slate-50 font-semibold">
+                      <TableCell colSpan={3} className="text-right">Grand total</TableCell>
+                      <TableCell>{formatCurrency(report.expenseSummary.total)}</TableCell>
+                    </TableRow>
+                  ) : null}
                 </TableBody>
               </Table>
             </CardContent>

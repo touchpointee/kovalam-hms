@@ -1,0 +1,10 @@
+
+D:\touchpointe\kovalam-hms\app\frontdesk\lab-billing\lab-only\[patientId]\page.tsx
+  604:41  error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  604:54  error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+D:\touchpointe\kovalam-hms\scripts\seed.ts
+  1:1  error  Definition for rule '@typescript-eslint/no-require-imports' was not found  @typescript-eslint/no-require-imports
+
+✖ 3 problems (3 errors, 0 warnings)
+

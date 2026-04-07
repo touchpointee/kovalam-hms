@@ -36,7 +36,7 @@ export default function DoctorPatientsPage() {
   const [lastVisits, setLastVisits] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    const params = new URLSearchParams({ page: String(page), limit: "10" });
+    const params = new URLSearchParams({ page: String(page), limit: "10", registrationType: "op" });
     if (search.trim()) params.set("search", search.trim());
     fetch(`/api/patients?${params}`)
       .then((res) => res.json())

@@ -94,15 +94,27 @@ export default function MedicineBatchPage() {
   const [loading, setLoading] = useState(true);
   const [transferOpen, setTransferOpen] = useState(false);
   const [txOpen, setTxOpen] = useState<StockBatch | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editBatch, setEditBatch] = useState<StockBatch | null>(null);
   const [saving, setSaving] = useState(false);
   const [transferSourceId, setTransferSourceId] = useState("");
   const [transferQty, setTransferQty] = useState("1");
   const [transferReason, setTransferReason] = useState("");
   const [transferReference, setTransferReference] = useState("");
-  const [txType, setTxType] = useState<"out" | "adjustment">("out");
+  const [txType, setTxType] = useState<"in" | "out" | "adjustment">("out");
   const [txQty, setTxQty] = useState("1");
   const [txReason, setTxReason] = useState("");
   const [txReference, setTxReference] = useState("");
+  const [editForm, setEditForm] = useState({
+    batchNo: "",
+    expiryDate: "",
+    mrp: "",
+    sellingPrice: "",
+    currentStock: "",
+    location: "",
+    supplier: "",
+    reason: "",
+  });
 
   const loadBatches = useCallback(async () => {
     if (!medicineId) {
@@ -182,6 +194,21 @@ export default function MedicineBatchPage() {
     return <Badge className="bg-green-600">{">"}90d</Badge>;
   };
 
+  const openEditBatch = (batch: StockBatch) => {
+    setEditBatch(batch);
+    setEditForm({
+      batchNo: batch.batchNo,
+      expiryDate: format(new Date(batch.expiryDate), "yyyy-MM-dd"),
+      mrp: String(batch.mrp ?? ""),
+      sellingPrice: String(batch.sellingPrice ?? ""),
+      currentStock: String(batch.currentStock ?? ""),
+      location: batch.location ?? "",
+      supplier: batch.supplier ?? "",
+      reason: "Batch edit",
+    });
+    setEditOpen(true);
+  };
+
   const transferStock = async () => {
     if (!transferSourceId || parseInt(transferQty, 10) <= 0) {
       toast.error("Choose a store batch and quantity");
@@ -243,6 +270,61 @@ export default function MedicineBatchPage() {
       setTxReason("");
       setTxReference("");
       setTxType("out");
+      await Promise.all([loadBatches(), loadTransactions(), loadStoreBatches()]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveBatch = async () => {
+    if (!editBatch) return;
+    if (!editForm.batchNo || !editForm.expiryDate || !editForm.mrp || !editForm.sellingPrice) {
+      toast.error("Fill all required fields");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/stock/batch/${editBatch._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          batchNo: editForm.batchNo,
+          expiryDate: editForm.expiryDate,
+          mrp: Number(editForm.mrp),
+          sellingPrice: Number(editForm.sellingPrice),
+          currentStock: editForm.currentStock !== "" ? parseInt(editForm.currentStock, 10) : undefined,
+          location: editForm.location,
+          supplier: editForm.supplier,
+          reason: editForm.reason,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? "Failed");
+
+      toast.success("Batch updated");
+      setEditOpen(false);
+      setEditBatch(null);
+      await Promise.all([loadBatches(), loadTransactions(), loadStoreBatches()]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteBatch = async (batch: StockBatch) => {
+    if (!isAdminView) return;
+    const confirmed = window.confirm(`Delete batch ${batch.batchNo}? This cannot be undone.`);
+    if (!confirmed) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/stock/batch/${batch._id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? "Failed");
+      toast.success("Batch deleted");
       await Promise.all([loadBatches(), loadTransactions(), loadStoreBatches()]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed");
@@ -398,10 +480,25 @@ export default function MedicineBatchPage() {
                       <TableCell>{formatCurrency(batch.sellingPrice)}</TableCell>
                       <TableCell>{batch.location || "Pharmacy"}</TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2 text-sm">
-                          <button
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
                             type="button"
-                            className="text-teal-700 hover:underline"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setTxOpen(batch);
+                              setTxQty("1");
+                              setTxReason("");
+                              setTxReference("");
+                              setTxType("in");
+                            }}
+                          >
+                            Stock In
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
                             onClick={() => {
                               setTxOpen(batch);
                               setTxQty("1");
@@ -411,20 +508,27 @@ export default function MedicineBatchPage() {
                             }}
                           >
                             Stock Out
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
-                            className="text-teal-700 hover:underline"
+                            size="sm"
+                            variant="outline"
                             onClick={() => {
-                              setTxOpen(batch);
-                              setTxQty(String(batch.currentStock));
-                              setTxReason("Manual adjustment");
-                              setTxReference("");
-                              setTxType("adjustment");
+                              openEditBatch(batch);
                             }}
                           >
-                            Edit
-                          </button>
+                            Edit Batch
+                          </Button>
+                          {isAdminView ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => deleteBatch(batch)}
+                            >
+                              Delete
+                            </Button>
+                          ) : null}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -492,9 +596,10 @@ export default function MedicineBatchPage() {
           <div className="grid gap-4">
             <div>
               <Label>Transaction Type</Label>
-              <Select value={txType} onValueChange={(value: "out" | "adjustment") => setTxType(value)}>
+              <Select value={txType} onValueChange={(value: "in" | "out" | "adjustment") => setTxType(value)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="in">Stock In</SelectItem>
                   <SelectItem value="out">Stock Out</SelectItem>
                   <SelectItem value="adjustment">Adjustment (absolute quantity)</SelectItem>
                 </SelectContent>
@@ -516,6 +621,50 @@ export default function MedicineBatchPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setTxOpen(null)}>Cancel</Button>
             <Button onClick={submitTransaction} disabled={saving || !txQty}>{saving ? "..." : "Submit"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit Batch</DialogTitle></DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label>Batch No *</Label>
+              <Input value={editForm.batchNo} onChange={(e) => setEditForm((form) => ({ ...form, batchNo: e.target.value }))} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Expiry Date *</Label>
+              <Input type="date" value={editForm.expiryDate} onChange={(e) => setEditForm((form) => ({ ...form, expiryDate: e.target.value }))} />
+            </div>
+            <div className="grid gap-2">
+              <Label>MRP *</Label>
+              <Input type="number" min="0" value={editForm.mrp} onChange={(e) => setEditForm((form) => ({ ...form, mrp: e.target.value }))} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Selling Price *</Label>
+              <Input type="number" min="0" value={editForm.sellingPrice} onChange={(e) => setEditForm((form) => ({ ...form, sellingPrice: e.target.value }))} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Current Stock</Label>
+              <Input type="number" min="0" value={editForm.currentStock} onChange={(e) => setEditForm((form) => ({ ...form, currentStock: e.target.value }))} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Location</Label>
+              <Input value={editForm.location} onChange={(e) => setEditForm((form) => ({ ...form, location: e.target.value }))} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Supplier</Label>
+              <Input value={editForm.supplier} onChange={(e) => setEditForm((form) => ({ ...form, supplier: e.target.value }))} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Reason (optional)</Label>
+              <Input value={editForm.reason} onChange={(e) => setEditForm((form) => ({ ...form, reason: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button onClick={saveBatch} disabled={saving}>{saving ? "Saving..." : "Save Changes"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
