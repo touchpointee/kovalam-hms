@@ -39,8 +39,23 @@ export const GET = withRouteLog("stock.low.GET", async (req: Request) => {
         const isLowStock = currentStock > 0 && currentStock < minQuantity;
         const isCriticalStock = currentStock <= Math.max(1, Math.floor(minQuantity / 2));
         const isExpired = daysToExpiry < 0;
-        const isExpiringSoon = daysToExpiry >= 0 && daysToExpiry <= 30;
+        const isExpiringSoon = daysToExpiry >= 0 && daysToExpiry <= 120;
         const isAlert = isOutOfStock || isLowStock || isExpired || isExpiringSoon;
+
+        let expiryMessage = "";
+        if (isExpired) {
+          expiryMessage = "Expired";
+        } else if (isExpiringSoon) {
+          if (daysToExpiry <= 30) {
+            expiryMessage = `${daysToExpiry} days`;
+          } else if (daysToExpiry <= 60) {
+            expiryMessage = "2 months";
+          } else if (daysToExpiry <= 90) {
+            expiryMessage = "3 months";
+          } else {
+            expiryMessage = "4 months";
+          }
+        }
 
         return {
           ...batch,
@@ -52,6 +67,7 @@ export const GET = withRouteLog("stock.low.GET", async (req: Request) => {
           isExpired,
           isExpiringSoon,
           isAlert,
+          expiryMessage,
         };
       })
       .filter((batch) => batch.isAlert);

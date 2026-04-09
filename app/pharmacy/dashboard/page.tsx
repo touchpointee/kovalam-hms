@@ -12,6 +12,9 @@ type LowStockBatch = {
   batchNo?: string;
   currentStock?: number;
   medicine?: { name?: string };
+  expiryMessage?: string;
+  isExpired?: boolean;
+  isExpiringSoon?: boolean;
 };
 
 export default function PharmacyDashboardPage() {
@@ -90,10 +93,18 @@ export default function PharmacyDashboardPage() {
               <ul className="space-y-2 text-sm">
                 {lowStock.slice(0, 5).map((b, i) => (
                   <li key={i} className="flex items-center justify-between rounded-md border px-3 py-2">
-                    <span>{b.medicine?.name ?? "-"}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {b.batchNo ?? "-"} · Stock: {b.currentStock ?? 0}
-                    </span>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-slate-700">{b.medicine?.name ?? "-"}</span>
+                      {b.expiryMessage && (
+                        <span className={`text-[10px] uppercase font-bold ${b.isExpired ? "text-red-500" : "text-amber-600"}`}>
+                          {b.isExpired ? "EXPIRED" : `Expires in ${b.expiryMessage}`}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-medium text-slate-800">Stock: {b.currentStock ?? 0}</p>
+                      <p className="text-[10px] text-muted-foreground">{b.batchNo ?? "-"}</p>
+                    </div>
                   </li>
                 ))}
               </ul>

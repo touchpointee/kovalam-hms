@@ -189,9 +189,18 @@ export default function MedicineBatchPage() {
   const getExpiryBadge = (expiryDate: string) => {
     const days = differenceInDays(new Date(expiryDate), new Date());
     if (days < 0) return <Badge className="bg-red-600">Expired</Badge>;
-    if (days <= 30) return <Badge className="bg-orange-500">{"<"}30d</Badge>;
-    if (days <= 90) return <Badge className="bg-yellow-500 text-black">30-90d</Badge>;
-    return <Badge className="bg-green-600">{">"}90d</Badge>;
+    
+    let message = "";
+    if (days <= 30) message = `${days} days`;
+    else if (days <= 60) message = "2 months";
+    else if (days <= 90) message = "3 months";
+    else if (days <= 120) message = "4 months";
+
+    if (message) {
+      return <Badge className="bg-orange-500">Expires in {message}</Badge>;
+    }
+    
+    return <Badge className="bg-green-600">Valid</Badge>;
   };
 
   const openEditBatch = (batch: StockBatch) => {

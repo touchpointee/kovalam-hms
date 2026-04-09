@@ -62,6 +62,7 @@ type MedicineSummary = {
   batchCount: number;
   status: "in" | "low" | "out" | "empty";
   expiryStatus: "expired" | "soon" | "ok" | "none";
+  expiryMessage?: string;
 };
 
 type CategoryOption = { _id: string; name: string };
@@ -167,10 +168,26 @@ export default function PharmacyStockPage() {
         .map((expiryDate) => differenceInDays(new Date(expiryDate as string), new Date()));
 
       let expiryStatus: MedicineSummary["expiryStatus"] = "none";
+      let expiryMessage = "";
       if (expiryDays.length > 0) {
-        if (expiryDays.some((days) => days < 0)) expiryStatus = "expired";
-        else if (expiryDays.some((days) => days <= 30)) expiryStatus = "soon";
-        else expiryStatus = "ok";
+        const minDays = Math.min(...expiryDays);
+        if (minDays < 0) {
+          expiryStatus = "expired";
+          expiryMessage = "Expired";
+        } else if (minDays <= 120) {
+          expiryStatus = "soon";
+          if (minDays <= 30) {
+            expiryMessage = `${minDays} days`;
+          } else if (minDays <= 60) {
+            expiryMessage = "2 months";
+          } else if (minDays <= 90) {
+            expiryMessage = "3 months";
+          } else {
+            expiryMessage = "4 months";
+          }
+        } else {
+          expiryStatus = "ok";
+        }
       }
 
       return {
@@ -180,6 +197,7 @@ export default function PharmacyStockPage() {
         batchCount: batches.length,
         status,
         expiryStatus,
+        expiryMessage,
       };
     });
   }, [batchesByMedicine, medicines]);
@@ -279,9 +297,9 @@ export default function PharmacyStockPage() {
     return <Badge variant="secondary">No Batches</Badge>;
   };
 
-  const renderExpiryStatus = (status: MedicineSummary["expiryStatus"]) => {
+  const renderExpiryStatus = (status: MedicineSummary["expiryStatus"], message?: string) => {
     if (status === "expired") return <Badge className="bg-red-100 text-red-700">Expired</Badge>;
-    if (status === "soon") return <Badge className="bg-amber-100 text-amber-700">Expiring Soon</Badge>;
+    if (status === "soon") return <Badge className="bg-amber-100 text-amber-700">Expires in {message}</Badge>;
     if (status === "ok") return <Badge className="bg-emerald-100 text-emerald-700">Valid</Badge>;
     return <Badge variant="secondary">No Expiry</Badge>;
   };
@@ -375,7 +393,7 @@ export default function PharmacyStockPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredSummaries.map(({ medicine, batchCount, totalStock, status, expiryStatus }) => (
+                  filteredSummaries.map(({ medicine, batchCount, totalStock, status, expiryStatus, expiryMessage }) => (
                     <TableRow
                       key={medicine._id}
                       className="cursor-pointer"
@@ -400,7 +418,7 @@ export default function PharmacyStockPage() {
                       </TableCell>
                       <TableCell>{totalStock}</TableCell>
                       <TableCell>{renderStatus(status)}</TableCell>
-                      <TableCell>{renderExpiryStatus(expiryStatus)}</TableCell>
+                      <TableCell>{renderExpiryStatus(expiryStatus, expiryMessage)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex flex-wrap justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                           <Button variant="ghost" size="sm" className="gap-1 text-teal-700" onClick={() => goBatches(medicine._id)}>
