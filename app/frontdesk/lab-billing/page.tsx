@@ -102,7 +102,7 @@ export default function FrontdeskLabBillingPage() {
         <CardHeader>
           <CardTitle>Today&apos;s OP visits</CardTitle>
           <CardDescription>
-            Open a visit to build the lab bill from Admin -&gt; Lab Tests (same catalog the doctor uses). You can also
+            Open a visit to build the lab bill from Admin {"->"} Lab Tests (same catalog the doctor uses). You can also
             print after saving.
           </CardDescription>
         </CardHeader>

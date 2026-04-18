@@ -494,7 +494,7 @@ export default function FrontdeskLabBillingLabOnlyPage() {
             <CardHeader>
               <CardTitle>Lab Test Items</CardTitle>
               <CardDescription>
-                Search Admin -&gt; Lab Tests, add lines, then generate or update the bill.
+                Search Admin {"->"} Lab Tests, add lines, then generate or update the bill.
               </CardDescription>
             </CardHeader>
             <CardContent>
