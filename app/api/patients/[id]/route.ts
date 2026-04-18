@@ -19,6 +19,16 @@ import mongoose from "mongoose";
 import { withRouteLog } from "@/lib/with-route-log";
 import { isValidMobileNumber, normalizeMobileNumber } from "@/lib/mobile";
 
+function normalizeRegistrationType(patient: { registrationType?: string; regNo?: string }) {
+  if (patient.registrationType === "lab" || patient.registrationType === "pharmacy" || patient.registrationType === "op") {
+    return patient.registrationType;
+  }
+  const regNo = patient.regNo?.trim().toUpperCase() ?? "";
+  if (regNo.startsWith("LAB")) return "lab";
+  if (regNo.startsWith("PHRM")) return "pharmacy";
+  return "op";
+}
+
 export const GET = withRouteLog("patients.id.GET", async (
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -51,6 +61,7 @@ export const GET = withRouteLog("patients.id.GET", async (
 
     return NextResponse.json({
       ...patient,
+      registrationType: normalizeRegistrationType(patient as { registrationType?: string; regNo?: string }),
       visits,
       prescriptions,
       procedureBills,

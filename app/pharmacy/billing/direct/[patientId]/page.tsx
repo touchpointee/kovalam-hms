@@ -1,0 +1,793 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useParams, usePathname, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { differenceInDays, format } from "date-fns";
+import toast from "react-hot-toast";
+import { formatCurrency, formatPaymentMethodLabel } from "@/lib/utils";
+import { PaymentMethodSelect } from "@/components/PaymentMethodSelect";
+import {
+  grandTotalAfterBillOffer,
+  lineNetAfterOffer,
+} from "@/lib/bill-offers";
+import { BillSignature, PrintLayout } from "@/components/PrintLayout";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { SearchableCombobox } from "@/components/SearchableCombobox";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { X } from "lucide-react";
+import { useMedicineBillingListHref } from "@/hooks/usePharmacyBase";
+import { BillingStaffSelect, getBillingStaffDisplayName } from "@/components/BillingStaffSelect";
+
+type Patient = { _id: string; name: string; regNo: string; phone?: string; age?: number; address?: string; createdAt?: string };
+type PrescriptionMed = { medicineName: string; medicine?: string | { _id: string } };
+type Prescription = {
+  _id: string;
+  doctor?: { name: string };
+  medicines: PrescriptionMed[];
+};
+type MedicineOption = {
+  _id: string;
+  name: string;
+};
+type StockBatch = {
+  _id: string;
+  batchNo: string;
+  expiryDate: string;
+  mrp: number;
+  sellingPrice: number;
+  currentStock: number;
+  medicine?: { name: string };
+};
+type BillItem = {
+  id: string;
+  medicineId?: string;
+  medicineStockId?: string;
+  medicineName: string;
+  batchNo: string;
+  expiryDate: string;
+  quantity: number;
+  mrp: number;
+  sellingPrice: number;
+  lineOffer: number;
+  totalPrice: number;
+  currentStock: number;
+  stockStatus: "in_stock" | "no_stock";
+  availableBatches: StockBatch[];
+  source: "prescription" | "manual";
+};
+type MedicineBill = {
+  _id: string;
+  patient?: Patient;
+  billedAt?: string;
+  generatedByName?: string;
+  billedBy?: { name?: string } | null;
+  items: BillItem[];
+  grandTotal: number;
+  billOffer?: number;
+  paymentMethod?: { _id?: string; name?: string; code?: string } | null;
+};
+type StoredMedicineBill = {
+  _id: string;
+  patient?: Patient;
+  billedAt?: string;
+  generatedByName?: string;
+  billedBy?: { name?: string } | null;
+  paymentMethod?: { _id?: string; name?: string; code?: string } | null;
+  items: Array<{
+    medicineStock?: {
+      _id?: string;
+      medicine?: string | { _id?: string; name?: string };
+    };
+    medicineName: string;
+    batchNo: string;
+    expiryDate: string;
+    quantity: number;
+    mrp: number;
+    sellingPrice: number;
+    totalPrice: number;
+    lineOffer?: number;
+  }>;
+  grandTotal: number;
+  billOffer?: number;
+};
+
+export default function DirectMedicineBillingPage() {
+  const { data: session } = useSession();
+  const router = useRouter();
+  const pathname = usePathname();
+  const isAdmin = session?.user?.role === "admin";
+  const role = session?.user?.role;
+  const canEditMedicineBill =
+    isAdmin || role === "pharmacy" || role === "frontdesk";
+  const visitListBackHref = useMedicineBillingListHref();
+  const params = useParams<{ patientId: string }>();
+  const patientId = params?.patientId ?? "";
+
+  const [patient, setPatient] = useState<Patient | null>(null);
+  const [prescription, setPrescription] = useState<Prescription | null>(null);
+  const [items, setItems] = useState<BillItem[]>([]);
+  const [medicineOptions, setMedicineOptions] = useState<MedicineOption[]>([]);
+  const [selectedMedicineId, setSelectedMedicineId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [bill, setBill] = useState<MedicineBill | null>(null);
+  const [editingBill, setEditingBill] = useState(false);
+  const [billOffer, setBillOffer] = useState(0);
+  const [paymentMethodId, setPaymentMethodId] = useState("");
+  const [generatedByName, setGeneratedByName] = useState("");
+
+  const isFrontdeskDirectSale = pathname.startsWith("/frontdesk/medicine-billing/direct/");
+  const backHref = isFrontdeskDirectSale ? "/frontdesk/register" : visitListBackHref;
+  const backLabel = isFrontdeskDirectSale ? "Back to Registration" : "Back to Medicine Billing";
+
+  const buildBillItem = (medicineId: string | undefined, medicineName: string, batches: StockBatch[], source: "prescription" | "manual"): BillItem => {
+    const availableBatches = [...batches]
+      .filter((batch) => batch.currentStock > 0)
+      .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+    const batch = availableBatches[0];
+
+    if (!batch) {
+      return {
+        id: `${medicineId ?? medicineName}-${source}-${Math.random().toString(36).slice(2, 9)}`,
+        medicineId,
+        medicineStockId: undefined,
+        medicineName,
+        batchNo: "-",
+        expiryDate: new Date().toISOString(),
+        quantity: 0,
+        mrp: 0,
+        sellingPrice: 0,
+        lineOffer: 0,
+        totalPrice: 0,
+        currentStock: 0,
+        stockStatus: "no_stock",
+        availableBatches: [],
+        source,
+      };
+    }
+
+    return {
+      id: `${medicineId ?? medicineName}-${batch._id}-${source}-${Math.random().toString(36).slice(2, 9)}`,
+      medicineId,
+      medicineStockId: batch._id,
+      medicineName: batch.medicine?.name ?? medicineName,
+      batchNo: batch.batchNo,
+      expiryDate: batch.expiryDate,
+      quantity: 1,
+      mrp: batch.mrp,
+      sellingPrice: batch.sellingPrice,
+      lineOffer: 0,
+      totalPrice: batch.sellingPrice,
+      currentStock: batch.currentStock,
+      stockStatus: "in_stock",
+      availableBatches,
+      source,
+    };
+  };
+
+  const hydrateStoredBillItems = useCallback(async (storedBill: StoredMedicineBill) => {
+    const rows = await Promise.all(
+      storedBill.items.map(async (item) => {
+        const stock = item.medicineStock;
+        const medicineId =
+          typeof stock?.medicine === "string"
+            ? stock.medicine
+            : (stock?.medicine as { _id?: string } | undefined)?._id;
+
+        if (!medicineId) {
+          return buildBillItem(undefined, item.medicineName, [], "manual");
+        }
+
+        const batchesRes = await fetch(`/api/stock?medicineId=${medicineId}&inventoryType=pharmacy`, { cache: "no-store" });
+        const batches = (await batchesRes.json()) as StockBatch[];
+        const availableBatches = (batches ?? []).filter((batch) => batch.currentStock > 0);
+        const selectedBatch = availableBatches.find((batch) => batch._id === stock?._id);
+        if (!selectedBatch) {
+          return buildBillItem(medicineId, item.medicineName, batches ?? [], "manual");
+        }
+
+        const q = Math.min(item.quantity, selectedBatch.currentStock);
+        const sp = Number(item.sellingPrice) || selectedBatch.sellingPrice;
+        const lineOffer = Number(item.lineOffer) || 0;
+        const gross = sp * q;
+        return {
+          id: `${medicineId}-${selectedBatch._id}-saved-${Math.random().toString(36).slice(2, 9)}`,
+          medicineId,
+          medicineStockId: selectedBatch._id,
+          medicineName: item.medicineName,
+          batchNo: selectedBatch.batchNo,
+          expiryDate: selectedBatch.expiryDate,
+          quantity: q,
+          mrp: selectedBatch.mrp,
+          sellingPrice: sp,
+          lineOffer,
+          totalPrice: lineNetAfterOffer(gross, lineOffer),
+          currentStock: selectedBatch.currentStock,
+          stockStatus: "in_stock",
+          availableBatches,
+          source: "manual",
+        } as BillItem;
+      })
+    );
+
+    setItems(rows);
+    setBillOffer(Number(storedBill.billOffer) || 0);
+    const pm = storedBill.paymentMethod;
+    setPaymentMethodId(pm?._id ? String(pm._id) : "");
+    setGeneratedByName(storedBill.generatedByName?.trim() || "");
+  }, []);
+
+  useEffect(() => {
+    if (!patientId) return;
+    setLoading(true);
+
+    Promise.all([
+      fetch(`/api/patients/${patientId}`, { cache: "no-store" }).then((res) => res.json()),
+      fetch("/api/medicines", { cache: "no-store" }).then((res) => res.json()),
+    ])
+      .then(async ([visitData, medicineList]) => {
+        setMedicineOptions(Array.isArray(medicineList) ? medicineList : []);
+        if (!visitData?._id) {
+          throw new Error("Patient not found");
+        }
+        setPatient(visitData as unknown as Patient);
+        const existingBillId = Array.isArray(visitData.medicineBills) && visitData.medicineBills.length > 0
+          ? visitData.medicineBills[0]?._id
+          : undefined;
+        if (existingBillId) {
+          const billRes = await fetch(`/api/billing/medicine/${existingBillId}`, { cache: "no-store" });
+          const storedBill = (await billRes.json()) as StoredMedicineBill;
+          setBill(storedBill as unknown as MedicineBill);
+          setEditingBill(false);
+          await hydrateStoredBillItems(storedBill);
+        } else {
+          setBill(null);
+          setPaymentMethodId("");
+          setGeneratedByName("");
+          setEditingBill(true);
+        }
+        setPrescription(null);
+      })
+      .catch((e) => {
+        setPrescription(null);
+        setPatient(null);
+        setItems([]);
+        toast.error(e instanceof Error ? e.message : "Failed to load patient");
+      })
+      .finally(() => setLoading(false));
+  }, [hydrateStoredBillItems, patientId]);
+
+  const updateItemQty = (idx: number, qty: number) => {
+    const item = items[idx];
+    if (!item || item.stockStatus === "no_stock" || qty < 0 || qty > item.currentStock) return;
+    setItems((prev) => {
+      const next = [...prev];
+      const row = next[idx];
+      const gross = row.sellingPrice * qty;
+      next[idx] = {
+        ...row,
+        quantity: qty,
+        totalPrice: lineNetAfterOffer(gross, row.lineOffer),
+      };
+      return next;
+    });
+  };
+
+  const updateLineOffer = (idx: number, raw: number) => {
+    setItems((prev) => {
+      const next = [...prev];
+      const row = next[idx];
+      const gross = row.sellingPrice * row.quantity;
+      const lineOffer = Math.max(0, raw);
+      next[idx] = {
+        ...row,
+        lineOffer,
+        totalPrice: lineNetAfterOffer(gross, lineOffer),
+      };
+      return next;
+    });
+  };
+
+  const updateItemBatch = (idx: number, batchId: string) => {
+    const item = items[idx];
+    if (!item) return;
+    const nextBatch = item.availableBatches.find((batch) => batch._id === batchId);
+    if (!nextBatch) return;
+
+    setItems((prev) => {
+      const next = [...prev];
+      const quantity = Math.min(Math.max(next[idx].quantity, 1), nextBatch.currentStock);
+      const row = next[idx];
+      const gross = nextBatch.sellingPrice * quantity;
+      next[idx] = {
+        ...row,
+        medicineStockId: nextBatch._id,
+        medicineName: nextBatch.medicine?.name ?? row.medicineName,
+        batchNo: nextBatch.batchNo,
+        expiryDate: nextBatch.expiryDate,
+        mrp: nextBatch.mrp,
+        sellingPrice: nextBatch.sellingPrice,
+        currentStock: nextBatch.currentStock,
+        quantity,
+        totalPrice: lineNetAfterOffer(gross, row.lineOffer),
+        stockStatus: "in_stock",
+      };
+      return next;
+    });
+  };
+
+  const addMedicineToBill = async () => {
+    if (!selectedMedicineId) {
+      toast.error("Select a medicine");
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/stock?medicineId=${selectedMedicineId}&inventoryType=pharmacy`, { cache: "no-store" });
+      const batches = (await res.json()) as StockBatch[];
+      const selectedMedicine = medicineOptions.find((medicine) => medicine._id === selectedMedicineId);
+      const newItem = buildBillItem(selectedMedicineId, selectedMedicine?.name ?? "Medicine", batches ?? [], "manual");
+      setItems((prev) => [...prev, newItem]);
+      setSelectedMedicineId("");
+    } catch {
+      toast.error("Failed to load medicine stock");
+    }
+  };
+
+  const removeItem = (idx: number) => {
+    setItems((prev) => prev.filter((_, itemIndex) => itemIndex !== idx));
+  };
+
+  const billableItems = useMemo(
+    () => items.filter((i) => i.stockStatus === "in_stock" && i.medicineStockId && i.quantity > 0),
+    [items]
+  );
+
+  const linesNetSum = useMemo(
+    () => billableItems.reduce((sum, row) => sum + row.totalPrice, 0),
+    [billableItems]
+  );
+  const grandTotal = useMemo(
+    () => grandTotalAfterBillOffer(linesNetSum, billOffer),
+    [linesNetSum, billOffer]
+  );
+
+  const generateBill = async () => {
+    if (!patient?._id || billableItems.length === 0) {
+      toast.error("No billable medicines found");
+      return;
+    }
+    if (!generatedByName.trim()) {
+      toast.error("Select staff before generating the bill");
+      return;
+    }
+    if (grandTotal > 0 && !paymentMethodId.trim()) {
+      toast.error("Select a payment method");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const isUpdate = Boolean(bill?._id);
+      const res = await fetch(isUpdate ? `/api/billing/medicine/${bill?._id}` : "/api/billing/medicine", {
+        method: isUpdate ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientId: patient._id,
+          prescriptionId: prescription?._id,
+          billOffer,
+          ...(grandTotal > 0 && paymentMethodId.trim()
+            ? { paymentMethodId: paymentMethodId.trim() }
+            : {}),
+          generatedByName,
+          items: billableItems.map((i) => ({
+            medicineStockId: i.medicineStockId,
+            quantity: i.quantity,
+            sellingPrice: i.sellingPrice,
+            ...(i.lineOffer > 0 ? { lineOffer: i.lineOffer } : {}),
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? "Failed to generate bill");
+      setBill(data as MedicineBill);
+      setEditingBill(false);
+      toast.success(isUpdate ? "Bill updated" : "Bill generated");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to generate bill");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const getExpiryBadge = (expiryDate: string) => {
+    const days = differenceInDays(new Date(expiryDate), new Date());
+    if (days < 0) return <Badge className="bg-red-600">Expired</Badge>;
+    if (days <= 30) return <Badge className="bg-orange-500">{"<"}30d</Badge>;
+    return <Badge className="bg-green-600">OK</Badge>;
+  };
+
+  if (bill && !editingBill) {
+    return (
+      <PrintLayout
+        title="Medicine Bill"
+        paper="portrait"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="default" onClick={() => window.print()}>
+              Print
+            </Button>
+            <Button variant="outline" onClick={() => router.back()}>
+              Go Back
+            </Button>
+            <Button asChild variant="outline">
+              <Link href={backHref}>{backLabel}</Link>
+            </Button>
+            {canEditMedicineBill && (
+              <Button variant="outline" onClick={() => setEditingBill(true)}>
+                Edit Bill
+              </Button>
+            )}
+          </div>
+        }
+      >
+        <div className="space-y-4 print-only">
+          <div className="grid grid-cols-2 gap-8 border-y border-slate-400 py-4 text-[15px]">
+            <div className="space-y-2">
+              <div className="grid grid-cols-[120px_1fr]">
+                <span>DMC ID</span>
+                <span>: {(bill.patient as unknown as Patient)?.regNo ?? "-"}</span>
+              </div>
+              <div className="grid grid-cols-[120px_1fr]">
+                <span>Patient Name</span>
+                <span>: {(bill.patient as unknown as Patient)?.name ?? "-"}</span>
+              </div>
+              <div className="grid grid-cols-[120px_1fr]">
+                <span>Phone</span>
+                <span>: {(bill.patient as unknown as Patient)?.phone ?? "-"}</span>
+              </div>
+              <div className="grid grid-cols-[120px_1fr]">
+                <span>Address</span>
+                <span>: {(bill.patient as unknown as Patient)?.address?.trim() || "-"}</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="grid grid-cols-[150px_1fr]">
+                <span>Consultation date and time</span>
+                <span>
+                  :{" "}
+                  {patient?.createdAt
+                    ? format(new Date(patient.createdAt), "dd MMM yyyy, HH:mm")
+                    : "—"}
+                </span>
+              </div>
+              <div className="grid grid-cols-[150px_1fr]">
+                <span>Bill date and time</span>
+                <span>
+                  : {bill.billedAt ? format(new Date(bill.billedAt), "dd MMM yyyy, HH:mm") : "—"}
+                </span>
+              </div>
+              <div className="grid grid-cols-[150px_1fr]">
+                <span>Age</span>
+                <span>: {(bill.patient as unknown as Patient)?.age ?? "-"}</span>
+              </div>
+              <div className="grid grid-cols-[150px_1fr]">
+                <span>Consultant Doctor</span>
+                <span>
+                  :{" "}
+                  {"—"}
+                </span>
+              </div>
+            </div>
+          </div>
+          <table className="w-full border-collapse text-[15px]">
+            <thead>
+              <tr>
+                <th className="border border-slate-400 px-3 py-2 text-left font-semibold">#</th>
+                <th className="border border-slate-400 px-3 py-2 text-left font-semibold">Description</th>
+                <th className="border border-slate-400 px-3 py-2 text-center font-semibold">Qty</th>
+                <th className="border border-slate-400 px-3 py-2 text-right font-semibold">Rate</th>
+                <th className="border border-slate-400 px-3 py-2 text-right font-semibold">Line offer</th>
+                <th className="border border-slate-400 px-3 py-2 text-right font-semibold">Amount (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bill.items.map((row, i) => {
+                const lo = Number((row as BillItem).lineOffer) || 0;
+                return (
+                  <tr key={i}>
+                    <td className="border border-slate-400 px-3 py-2 align-top">{i + 1}</td>
+                    <td className="border border-slate-400 px-3 py-2 align-top">
+                      <div>{row.medicineName}</div>
+                    </td>
+                    <td className="border border-slate-400 px-3 py-2 text-center align-top">{row.quantity}</td>
+                    <td className="border border-slate-400 px-3 py-2 text-right align-top">{formatCurrency(row.sellingPrice)}</td>
+                    <td className="border border-slate-400 px-3 py-2 text-right align-top">
+                      {lo > 0 ? formatCurrency(lo) : "—"}
+                    </td>
+                    <td className="border border-slate-400 px-3 py-2 text-right align-top">{formatCurrency(row.totalPrice)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {(() => {
+            const grossSum = bill.items.reduce(
+              (s, r) => s + Number(r.sellingPrice) * Number(r.quantity),
+              0
+            );
+            const lineOfferSum = bill.items.reduce(
+              (s, r) => s + (Number((r as BillItem).lineOffer) || 0),
+              0
+            );
+            const linesNet = bill.items.reduce((s, r) => s + Number(r.totalPrice), 0);
+            const bo = Number(bill.billOffer) || 0;
+            return (
+              <div className="pt-8">
+                <div className="ml-auto grid w-[340px] grid-cols-[1fr_120px] gap-y-1 text-[15px]">
+                  <div className="border-b border-slate-300 py-1">Subtotal (gross)</div>
+                  <div className="border-b border-slate-300 py-1 text-right">{formatCurrency(grossSum)}</div>
+                  <div className="border-b border-slate-300 py-1">Line offers</div>
+                  <div className="border-b border-slate-300 py-1 text-right text-red-700">
+                    {lineOfferSum > 0 ? `−${formatCurrency(lineOfferSum)}` : "—"}
+                  </div>
+                  <div className="border-b border-slate-300 py-1">After line offers</div>
+                  <div className="border-b border-slate-300 py-1 text-right">{formatCurrency(linesNet)}</div>
+                  {bo > 0 ? (
+                    <>
+                      <div className="border-b border-slate-300 py-1">Bill offer</div>
+                      <div className="border-b border-slate-300 py-1 text-right text-red-700">−{formatCurrency(bo)}</div>
+                    </>
+                  ) : null}
+                  {formatPaymentMethodLabel(bill.paymentMethod) ? (
+                    <>
+                      <div className="border-b border-slate-300 py-1">Payment method</div>
+                      <div className="border-b border-slate-300 py-1 text-right">
+                        {formatPaymentMethodLabel(bill.paymentMethod)}
+                      </div>
+                    </>
+                  ) : null}
+                  <div className="py-1 font-semibold">Net amount</div>
+                  <div className="py-1 text-right font-semibold">{formatCurrency(bill.grandTotal)}</div>
+                </div>
+                <BillSignature
+                  staffName={getBillingStaffDisplayName(bill.generatedByName) || bill.billedBy?.name?.trim()}
+                />
+              </div>
+            );
+          })()}
+        </div>
+      </PrintLayout>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Direct Billing Details</h1>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => router.back()}>
+            Go Back
+          </Button>
+          <Button asChild variant="outline">
+            <Link href={backHref}>{backLabel}</Link>
+          </Button>
+        </div>
+      </div>
+
+      {loading ? (
+        <Card>
+          <CardContent className="pt-6 text-sm text-muted-foreground">Loading visit details...</CardContent>
+        </Card>
+      ) : !patient ? (
+        <Card>
+          <CardContent className="pt-6 text-sm text-muted-foreground">Patient not found.</CardContent>
+        </Card>
+      ) : (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Patient Details</CardTitle>
+              <CardDescription>Direct pharmacy purchase</CardDescription>
+            </CardHeader>
+            <CardContent className="text-sm">
+              <p>
+                <strong>Patient:</strong> {patient.name} ({patient.regNo})
+              </p>
+              <p>
+                <strong>Registered:</strong>{" "}
+                {patient.createdAt ? format(new Date(patient.createdAt), "dd MMM yyyy, HH:mm") : "-"}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Medicines</CardTitle>
+              <CardDescription>
+                {"Search the catalog to add medicines; adjust batches before billing."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              
+
+                <div className="mb-4 rounded-xl border border-blue-100 bg-slate-50/60 p-4 shadow-sm">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+                    <div className="grid min-w-[min(100%,18rem)] flex-1 gap-2 sm:max-w-md">
+                      <Label>Add medicine</Label>
+                      <SearchableCombobox
+                        options={medicineOptions.map((m) => ({ value: m._id, label: m.name }))}
+                        value={selectedMedicineId}
+                        onValueChange={setSelectedMedicineId}
+                        placeholder="Search or select medicine"
+                        searchPlaceholder="Type to filter…"
+                        emptyMessage="No medicines match."
+                      />
+                    </div>
+                    <Button type="button" className="shrink-0" onClick={addMedicineToBill}>
+                      Add medicine
+                    </Button>
+                  </div>
+                </div>
+
+                {items.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No medicines added yet.</p>
+                ) : (
+                  <>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Medicine</TableHead>
+                          <TableHead>Batch</TableHead>
+                          <TableHead>Expiry</TableHead>
+                          <TableHead>Qty</TableHead>
+                          <TableHead>Price</TableHead>
+                          <TableHead>Line offer</TableHead>
+                          <TableHead>Total</TableHead>
+                          <TableHead>Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {items.map((row, idx) => (
+                          <TableRow key={row.id}>
+                            <TableCell>{row.medicineName}</TableCell>
+                            <TableCell>
+                              {row.stockStatus === "no_stock" ? (
+                                "-"
+                              ) : (
+                                <SearchableCombobox
+                                  options={row.availableBatches.map((batch) => ({
+                                    value: batch._id,
+                                    label: `${batch.batchNo} · exp ${format(new Date(batch.expiryDate), "dd/MM/yy")} · ${batch.currentStock} u · ${formatCurrency(batch.sellingPrice)}`,
+                                    keywords: `${batch.batchNo} ${batch.mrp} ${batch.sellingPrice}`,
+                                  }))}
+                                  value={row.medicineStockId ?? ""}
+                                  onValueChange={(value) => updateItemBatch(idx, value)}
+                                  placeholder="Batch"
+                                  searchPlaceholder="Search batch…"
+                                  emptyMessage="No batches."
+                                  triggerClassName="h-9 w-full min-w-[11rem] max-w-[240px] justify-between"
+                                  contentClassName="min-w-[18rem]"
+                                />
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {row.stockStatus === "no_stock" ? (
+                                <Badge className="bg-red-600">No Stock</Badge>
+                              ) : (
+                                getExpiryBadge(row.expiryDate)
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {row.stockStatus === "no_stock" ? (
+                                <span className="text-xs text-muted-foreground">-</span>
+                              ) : (
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={row.currentStock}
+                                  value={row.quantity}
+                                  onChange={(e) => updateItemQty(idx, parseInt(e.target.value, 10) || 0)}
+                                  className="w-20"
+                                />
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {row.stockStatus === "no_stock" ? "-" : formatCurrency(row.sellingPrice)}
+                            </TableCell>
+                            <TableCell>
+                              {row.stockStatus === "no_stock" ? (
+                                "-"
+                              ) : (
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step="0.01"
+                                  value={row.lineOffer || ""}
+                                  placeholder="0"
+                                  onChange={(e) =>
+                                    updateLineOffer(idx, parseFloat(e.target.value) || 0)
+                                  }
+                                  className="w-24 tabular-nums"
+                                />
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {row.stockStatus === "no_stock" ? "-" : formatCurrency(row.totalPrice)}
+                            </TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="icon" onClick={() => removeItem(idx)}>
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    <div className="mt-4 flex max-w-md flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/80 p-4">
+                      <Label htmlFor="med-bill-offer">Offer on whole bill (amount)</Label>
+                      <Input
+                        id="med-bill-offer"
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={billOffer || ""}
+                        placeholder="0"
+                        onChange={(e) => setBillOffer(Math.max(0, parseFloat(e.target.value) || 0))}
+                        className="max-w-[12rem] tabular-nums"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        After line offers: {formatCurrency(linesNetSum)}
+                        {billOffer > 0 ? ` · Net: ${formatCurrency(grandTotal)}` : ""}
+                      </p>
+                    </div>
+                    <div className="mt-4 flex max-w-md flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/80 p-4">
+                      <Label htmlFor="med-generated-by">Name to show on bill</Label>
+                      <BillingStaffSelect
+                        id="med-generated-by"
+                        label=""
+                        value={generatedByName}
+                        onValueChange={setGeneratedByName}
+                        className="max-w-[18rem]"
+                        triggerClassName="w-full max-w-[18rem]"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Prints as a small “Generated by” line on the bill.
+                      </p>
+                    </div>
+                    <PaymentMethodSelect
+                      className="mt-4 max-w-md"
+                      value={paymentMethodId}
+                      onValueChange={setPaymentMethodId}
+                      required={grandTotal > 0}
+                      onOptionsLoaded={(opts) => {
+                        setPaymentMethodId((id) => id || opts[0]?._id || "");
+                      }}
+                    />
+                    <div className="mt-4 flex items-center justify-between">
+                      <p className="text-sm font-semibold">Net total: {formatCurrency(grandTotal)}</p>
+                      <Button onClick={generateBill} disabled={submitting || billableItems.length === 0}>
+                        {submitting ? (bill ? "Updating..." : "Generating...") : (bill ? "Update Bill" : "Generate Bill")}
+                      </Button>
+                    </div>
+                  </>
+                )}
+            </CardContent>
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}

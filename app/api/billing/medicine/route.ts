@@ -26,7 +26,7 @@ const itemSchema = z.object({
 
 const postSchema = z.object({
   patientId: z.string().min(1),
-  visitId: z.string().min(1),
+  visitId: z.string().min(1).optional(),
   prescriptionId: z.string().optional(),
   items: z.array(itemSchema).min(1),
   billOffer: z.coerce.number().min(0).optional(),
@@ -61,16 +61,18 @@ export const POST = withRouteLog("billing.medicine.POST", async (req: NextReques
 
     const userId = (session!.user as { id?: string }).id;
     const generatedByName = parsed.data.generatedByName?.trim() || session!.user.name?.trim() || "";
-    const visit = await OPVisit.findById(parsed.data.visitId).lean() as { patient?: string } | null;
-    if (!visit) {
-      return NextResponse.json({ message: "Visit not found" }, { status: 400 });
-    }
-    if (String(visit.patient) !== parsed.data.patientId) {
-      return NextResponse.json({ message: "Visit does not belong to patient" }, { status: 400 });
-    }
-    const existingBill = await MedicineBill.findOne({ visit: parsed.data.visitId }).lean();
-    if (existingBill) {
-      return NextResponse.json({ message: "Medicine bill already exists for this visit" }, { status: 400 });
+    if (parsed.data.visitId) {
+      const visit = await OPVisit.findById(parsed.data.visitId).lean() as { patient?: string } | null;
+      if (!visit) {
+        return NextResponse.json({ message: "Visit not found" }, { status: 400 });
+      }
+      if (String(visit.patient) !== parsed.data.patientId) {
+        return NextResponse.json({ message: "Visit does not belong to patient" }, { status: 400 });
+      }
+      const existingBill = await MedicineBill.findOne({ visit: parsed.data.visitId }).lean();
+      if (existingBill) {
+        return NextResponse.json({ message: "Medicine bill already exists for this visit" }, { status: 400 });
+      }
     }
 
     const preparedItems: Array<{
@@ -144,7 +146,7 @@ export const POST = withRouteLog("billing.medicine.POST", async (req: NextReques
 
     const bill = await MedicineBill.create({
       patient: parsed.data.patientId,
-      visit: parsed.data.visitId,
+      visit: parsed.data.visitId || undefined,
       prescription: parsed.data.prescriptionId || undefined,
       items: billItems,
       billOffer: clampBillOffer(linesNetSum, parsed.data.billOffer ?? 0),
@@ -171,7 +173,7 @@ export const POST = withRouteLog("billing.medicine.POST", async (req: NextReques
         previousQuantity: prevQty,
         newQuantity: stock.currentStock,
         reason: "Medicine bill generated",
-        referenceNumber: String(parsed.data.visitId),
+        referenceNumber: parsed.data.visitId ? String(parsed.data.visitId) : String(bill._id),
         performedBy: userId,
       });
     }

@@ -17,7 +17,7 @@ const labBillItemSchema = new mongoose.Schema(
 const labBillSchema = new mongoose.Schema(
   {
     patient: { type: mongoose.Schema.Types.ObjectId, ref: "Patient", required: true },
-    visit: { type: mongoose.Schema.Types.ObjectId, ref: "OPVisit", unique: true, sparse: true },
+    visit: { type: mongoose.Schema.Types.ObjectId, ref: "OPVisit" },
     items: [labBillItemSchema],
     /** Extra amount off the bill after line offers (currency). */
     billOffer: { type: Number, default: 0 },
@@ -29,6 +29,15 @@ const labBillSchema = new mongoose.Schema(
     updatedAt: { type: Date, default: Date.now },
   },
   { timestamps: false }
+);
+
+// Only visit-linked lab bills must be unique; lab-only bills should not index null/missing visit.
+labBillSchema.index(
+  { visit: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { visit: { $type: "objectId" } },
+  }
 );
 
 clearRegisteredModel("LabBill");

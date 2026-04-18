@@ -97,7 +97,7 @@ export default function FrontdeskLabRegistrationPage() {
       try {
         const results = await Promise.all(
           list.map((p) =>
-            fetch(`/api/laboratory/bills?patientId=${p._id}&limit=1&page=1`, { cache: "no-store" })
+            fetch(`/api/laboratory/bills?patientId=${p._id}&labOnly=true&limit=1&page=1`, { cache: "no-store" })
               .then((r) => r.json())
               .catch(() => null)
           )
@@ -294,10 +294,17 @@ export default function FrontdeskLabRegistrationPage() {
                     })()}
                     <div className="grid grid-cols-2 gap-2">
                       <Button asChild className="w-full" size="sm">
-                        <Link href={`/frontdesk/lab-billing/lab-only/${p._id}`}>Create Lab Bill</Link>
+                        <Link href={`/frontdesk/lab-billing/lab-only/${p._id}`}>
+                          {(() => {
+                            const bill = labOnlyBillsByPatient[p._id];
+                            return bill?._id ? "Open Lab Bill" : "Create Lab Bill";
+                          })()}
+                        </Link>
                       </Button>
                       <Button asChild variant="outline" className="w-full" size="sm">
-                        <Link href={`/frontdesk/patients/${p._id}`}>Open Details</Link>
+                        <Link href={`/frontdesk/lab-billing/lab-only/${p._id}?view=details`}>
+                          Open Details
+                        </Link>
                       </Button>
                     </div>
                   </CardContent>

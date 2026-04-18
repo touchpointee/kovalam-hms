@@ -22,6 +22,7 @@ import { clampBillOffer, clampLineOffer, grandTotalAfterBillOffer, lineNetAfterO
 const postBodySchema = z.object({
   visitId: z.string().min(1).optional(),
   patientId: z.string().min(1).optional(),
+  billId: z.string().min(1).optional(),
   items: z.array(
     z.object({
       labTestId: z.string().min(1),
@@ -36,9 +37,39 @@ const postBodySchema = z.object({
   message: "visitId or patientId required",
 });
 
+async function ensureLabBillVisitIndex() {
+  const indexes = await LabBill.collection.indexes();
+  const visitIndex = indexes.find((index) => index.name === "visit_1");
+  const hasCorrectPartialIndex =
+    Boolean(visitIndex?.unique) &&
+    JSON.stringify(visitIndex?.partialFilterExpression ?? {}) ===
+      JSON.stringify({ visit: { $type: "objectId" } });
+
+  if (visitIndex && !hasCorrectPartialIndex) {
+    await LabBill.collection.dropIndex("visit_1");
+  }
+
+  if (!hasCorrectPartialIndex) {
+    await LabBill.collection.createIndex(
+      { visit: 1 },
+      {
+        name: "visit_1",
+        unique: true,
+        partialFilterExpression: { visit: { $type: "objectId" } },
+      }
+    );
+  }
+
+  await LabBill.updateMany(
+    { $or: [{ visit: null }, { visit: { $exists: false } }] },
+    { $unset: { visit: "" } }
+  );
+}
+
 export const GET = withRouteLog("laboratory.bills.GET", async (req: NextRequest) => {
   try {
     await dbConnect();
+    await ensureLabBillVisitIndex();
     const { session, error } = await requireAuth();
     if (error) return error;
     const forbidden = requireRole(session!, ["laboratory", "admin", "frontdesk"]);
@@ -60,11 +91,15 @@ export const GET = withRouteLog("laboratory.bills.GET", async (req: NextRequest)
       filter = { billedAt: { $gte: from, $lte: to } };
     }
     const patientId = req.nextUrl.searchParams.get("patientId");
+    const labOnly = req.nextUrl.searchParams.get("labOnly") === "true";
     if (patientId) {
       if (!mongoose.Types.ObjectId.isValid(patientId)) {
         return NextResponse.json({ message: "Invalid patient id" }, { status: 400 });
       }
       filter.patient = patientId;
+    }
+    if (labOnly) {
+      filter.$or = [{ visit: { $exists: false } }, { visit: null }];
     }
 
     const [rows, total] = await Promise.all([
@@ -104,6 +139,7 @@ export const GET = withRouteLog("laboratory.bills.GET", async (req: NextRequest)
 export const POST = withRouteLog("laboratory.bills.POST", async (req: NextRequest) => {
   try {
     await dbConnect();
+    await ensureLabBillVisitIndex();
     const { session, error } = await requireAuth();
     if (error) return error;
     const forbidden = requireRole(session!, ["frontdesk", "admin", "laboratory"]);
@@ -115,7 +151,7 @@ export const POST = withRouteLog("laboratory.bills.POST", async (req: NextReques
       return NextResponse.json({ message: "Validation failed" }, { status: 400 });
     }
 
-    const { visitId, patientId: rawPatientId, items, billOffer, paymentMethodId } = parsed.data;
+    const { visitId, patientId: rawPatientId, billId, items, billOffer, paymentMethodId } = parsed.data;
     let patientId = "";
     let visitRef: string | null = null;
     if (visitId) {
@@ -189,14 +225,26 @@ export const POST = withRouteLog("laboratory.bills.POST", async (req: NextReques
         .populate("items.labTest", "name price")
         .lean();
     } else {
-      const labOnlyFilter = {
+      const labOnlyBaseFilter = {
         patient: patientId,
         $or: [{ visit: { $exists: false } }, { visit: null }],
       };
-      hadExistingBill = !!(await LabBill.exists(labOnlyFilter));
+      let targetBillFilter: Record<string, unknown> | null = null;
+      if (billId) {
+        if (!mongoose.Types.ObjectId.isValid(billId)) {
+          return NextResponse.json({ message: "Invalid bill id" }, { status: 400 });
+        }
+        targetBillFilter = { ...labOnlyBaseFilter, _id: billId };
+        hadExistingBill = !!(await LabBill.exists(targetBillFilter));
+        if (!hadExistingBill) {
+          return NextResponse.json({ message: "Lab bill not found" }, { status: 404 });
+        }
+      }
 
       if (items.length === 0) {
-        await LabBill.deleteOne(labOnlyFilter);
+        if (targetBillFilter) {
+          await LabBill.deleteOne(targetBillFilter);
+        }
         labBill = null;
       } else {
         const ids = Array.from(new Set(items.map((i) => i.labTestId)));
@@ -234,16 +282,29 @@ export const POST = withRouteLog("laboratory.bills.POST", async (req: NextReques
           updatedAt: new Date(),
           ...(paymentMethodRef ? { paymentMethod: paymentMethodRef } : {}),
         };
-        labBill = await LabBill.findOneAndUpdate(
-          labOnlyFilter,
-          { $set: updateDoc, $unset: { visit: "" } },
-          { upsert: true, new: true, setDefaultsOnInsert: true }
-        )
-          .populate("patient", "name regNo age gender phone address")
-          .populate("billedBy", "name")
-          .populate("paymentMethod", "name code")
-          .populate("items.labTest", "name price")
-          .lean();
+        if (targetBillFilter) {
+          labBill = await LabBill.findOneAndUpdate(
+            targetBillFilter,
+            { $set: updateDoc, $unset: { visit: "" } },
+            { new: true }
+          )
+            .populate("patient", "name regNo age gender phone address")
+            .populate("billedBy", "name")
+            .populate("paymentMethod", "name code")
+            .populate("items.labTest", "name price")
+            .lean();
+        } else {
+          const created = await LabBill.create({
+            ...updateDoc,
+            billedAt: new Date(),
+          });
+          labBill = await LabBill.findById(created._id)
+            .populate("patient", "name regNo age gender phone address")
+            .populate("billedBy", "name")
+            .populate("paymentMethod", "name code")
+            .populate("items.labTest", "name price")
+            .lean();
+        }
       }
     }
 

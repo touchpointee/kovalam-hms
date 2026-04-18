@@ -3,6 +3,7 @@ import { dbConnect } from "@/lib/mongoose";
 import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { requireRole } from "@/lib/api-auth";
+import "@/models/Medicine";
 import MedicineStock from "@/models/MedicineStock";
 import { withRouteLog } from "@/lib/with-route-log";
 import { buildInventoryTypeQuery, normalizeStockInventoryType } from "@/lib/stock";

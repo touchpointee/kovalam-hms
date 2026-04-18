@@ -58,7 +58,7 @@ export default function FrontdeskLabBillingPage() {
         try {
           const results = await Promise.all(
             list.map((p) =>
-              fetch(`/api/laboratory/bills?patientId=${p._id}&limit=1&page=1`, { cache: "no-store" })
+              fetch(`/api/laboratory/bills?patientId=${p._id}&labOnly=true&limit=1&page=1`, { cache: "no-store" })
                 .then((r) => r.json())
                 .catch(() => null)
             )

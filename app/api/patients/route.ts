@@ -5,7 +5,7 @@ import { requireAuth, requireRole, type Role } from "@/lib/api-auth";
 import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import Patient from "@/models/Patient";
-import { generateLabRegNo, generateRegNo } from "@/lib/counters";
+import { generateLabRegNo, generateRegNo, generatePharmacyRegNo } from "@/lib/counters";
 import { withRouteLog } from "@/lib/with-route-log";
 import { isValidMobileNumber, normalizeMobileNumber } from "@/lib/mobile";
 
@@ -22,7 +22,7 @@ const createSchema = z.object({
   bloodGroup: z
     .enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "Unknown"])
     .optional(),
-  registrationType: z.enum(["op", "lab"]).optional(),
+  registrationType: z.enum(["op", "lab", "pharmacy"]).optional(),
 });
 
 export const GET = withRouteLog("patients.GET", async (req: NextRequest) => {
@@ -57,6 +57,13 @@ export const GET = withRouteLog("patients.GET", async (req: NextRequest) => {
           { regNo: new RegExp("^LAB\\d+$") },
         ],
       });
+    } else if (registrationType === "pharmacy") {
+      andFilters.push({
+        $or: [
+          { registrationType: "pharmacy" },
+          { regNo: new RegExp("^PHRM\\d+$") },
+        ],
+      });
     } else if (registrationType === "op") {
       andFilters.push({
         $and: [
@@ -66,7 +73,7 @@ export const GET = withRouteLog("patients.GET", async (req: NextRequest) => {
               { registrationType: { $exists: false } },
             ],
           },
-          { regNo: { $not: new RegExp("^LAB\\d+$") } },
+          { regNo: { $not: new RegExp("^(LAB|PHRM)\\d+$") } },
         ],
       });
     }
@@ -113,7 +120,7 @@ export const POST = withRouteLog("patients.POST", async (req: NextRequest) => {
     }
 
     const registrationType = parsed.data.registrationType ?? "op";
-    const regNo = registrationType === "lab" ? await generateLabRegNo() : await generateRegNo();
+    const regNo = registrationType === "lab" ? await generateLabRegNo() : registrationType === "pharmacy" ? await generatePharmacyRegNo() : await generateRegNo();
     const patient = await Patient.create({ ...parsed.data, registrationType, regNo });
     return NextResponse.json(patient.toJSON());
   } catch (e) {

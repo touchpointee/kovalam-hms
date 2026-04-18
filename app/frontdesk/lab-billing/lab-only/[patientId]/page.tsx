@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
@@ -26,7 +26,7 @@ import { PaymentMethodSelect } from "@/components/PaymentMethodSelect";
 import { BillingStaffSelect, getBillingStaffDisplayName } from "@/components/BillingStaffSelect";
 import { grandTotalAfterBillOffer, lineNetAfterOffer } from "@/lib/bill-offers";
 
-const visitListBackHref = "/frontdesk/lab-billing";
+const fallbackBackHref = "/frontdesk/lab-register";
 
 type Patient = { _id: string; name: string; regNo: string; phone?: string; age?: number; address?: string; createdAt?: string };
 type LabBillItem = {
@@ -91,6 +91,8 @@ function itemsFromLabBill(bill: LabBill | null, catalog: CatalogTest[]): LabLine
 }
 
 export default function FrontdeskLabBillingLabOnlyPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "admin";
   const role = session?.user?.role;
@@ -105,10 +107,21 @@ export default function FrontdeskLabBillingLabOnlyPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [bill, setBill] = useState<LabBill | null>(null);
+  const [billHistory, setBillHistory] = useState<LabBill[]>([]);
   const [editingBill, setEditingBill] = useState(false);
   const [billOffer, setBillOffer] = useState(0);
   const [paymentMethodId, setPaymentMethodId] = useState("");
   const [generatedByName, setGeneratedByName] = useState("");
+  const openInDetailsMode = searchParams.get("view") === "details";
+  const itemsSectionRef = useRef<HTMLDivElement | null>(null);
+
+  const goBack = useCallback(() => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push(fallbackBackHref);
+  }, [router]);
 
   const hydrateFromStoredBill = useCallback((stored: LabBill | null, cat: CatalogTest[]) => {
     setItems(itemsFromLabBill(stored, cat));
@@ -118,33 +131,53 @@ export default function FrontdeskLabBillingLabOnlyPage() {
     setGeneratedByName(stored?.generatedByName?.trim() || "");
   }, []);
 
-  useEffect(() => {
-    if (!patientId) return;
+  const startNewBill = useCallback(() => {
+    setBill(null);
+    setSelectedLabTestId("");
+    hydrateFromStoredBill(null, catalog);
+    setEditingBill(true);
+    window.setTimeout(() => {
+      itemsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  }, [catalog, hydrateFromStoredBill]);
+
+  const applySelectedBill = useCallback((stored: LabBill | null, cat: CatalogTest[], options?: { forceEdit?: boolean }) => {
+    const hasBill = Boolean(stored?.items?.length);
+    setBill(hasBill ? stored : null);
+    hydrateFromStoredBill(hasBill ? stored : null, cat);
+    setEditingBill(options?.forceEdit ? true : !hasBill);
+  }, [hydrateFromStoredBill]);
+
+  const loadLabRegistration = useCallback(() => {
+    if (!patientId) return Promise.resolve();
     setLoading(true);
-    Promise.all([
+    return Promise.all([
       fetch(`/api/patients/${patientId}`, { cache: "no-store" }).then((r) => r.json()),
       fetch("/api/lab-tests", { cache: "no-store" }).then((r) => r.json()),
-      fetch(`/api/laboratory/bills?patientId=${patientId}&limit=1&page=1`, { cache: "no-store" }).then((r) => r.json()),
+      fetch(`/api/laboratory/bills?patientId=${patientId}&labOnly=true&limit=20&page=1`, { cache: "no-store" }).then((r) => r.json()),
     ])
       .then(([patientData, labList, billList]) => {
         if (!patientData?._id) throw new Error("Patient not found");
         setPatient(patientData as Patient);
         const cat = Array.isArray(labList) ? labList : [];
         setCatalog(cat);
-        const stored = Array.isArray(billList?.items) ? billList.items[0] : null;
-        const hasBill = Boolean(stored?.items?.length);
-        setBill(hasBill ? stored : null);
-        hydrateFromStoredBill(hasBill ? stored : null, cat);
-        setEditingBill(!hasBill);
+        const rows = Array.isArray(billList?.items) ? (billList.items as LabBill[]) : [];
+        setBillHistory(rows);
+        applySelectedBill(rows[0] ?? null, cat, { forceEdit: openInDetailsMode });
       })
       .catch((e) => {
         setPatient(null);
         setBill(null);
+        setBillHistory([]);
         setItems([]);
         toast.error(e instanceof Error ? e.message : "Failed to load lab registration");
       })
       .finally(() => setLoading(false));
-  }, [hydrateFromStoredBill, patientId]);
+  }, [applySelectedBill, openInDetailsMode, patientId]);
+
+  useEffect(() => {
+    void loadLabRegistration();
+  }, [loadLabRegistration]);
 
   useEffect(() => {
     if (catalog.length === 0 || !bill?.items?.length) return;
@@ -240,6 +273,7 @@ export default function FrontdeskLabBillingLabOnlyPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         patientId,
+        ...(bill?._id ? { billId: bill._id } : {}),
         items: payload,
         ...(payload.length > 0 ? { billOffer: offerOnBill ?? 0 } : {}),
         ...(payload.length > 0 && pmId?.trim() ? { paymentMethodId: pmId.trim() } : {}),
@@ -283,9 +317,12 @@ export default function FrontdeskLabBillingLabOnlyPage() {
     try {
       const saved = await postLabItems(payload, billOffer, paymentMethodId);
       const hasSaved = Boolean(saved?.items?.length);
-      setBill(hasSaved ? saved : null);
-      hydrateFromStoredBill(hasSaved ? saved : null, catalog);
-      setEditingBill(!hasSaved);
+      if (hasSaved) {
+        setBill(saved);
+        hydrateFromStoredBill(saved, catalog);
+        setEditingBill(false);
+      }
+      await loadLabRegistration();
       toast.success(bill?._id ? "Lab bill updated" : "Lab bill generated");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to save lab bill");
@@ -299,9 +336,7 @@ export default function FrontdeskLabBillingLabOnlyPage() {
     setSubmitting(true);
     try {
       await postLabItems([], 0);
-      setBill(null);
-      hydrateFromStoredBill(null, catalog);
-      setEditingBill(true);
+      await loadLabRegistration();
       toast.success("Lab bill cleared");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to clear lab bill");
@@ -320,8 +355,14 @@ export default function FrontdeskLabBillingLabOnlyPage() {
             <Button variant="default" onClick={() => window.print()}>
               Print
             </Button>
-            <Button asChild variant="outline">
-              <Link href={visitListBackHref}>Back to Lab Billing</Link>
+            <Button variant="outline" onClick={goBack}>
+              Back
+            </Button>
+            <Button
+              variant="outline"
+              onClick={startNewBill}
+            >
+              New Lab Bill
             </Button>
             {canAdjustLabBill && (
               <Button variant="outline" onClick={() => setEditingBill(true)}>
@@ -459,9 +500,17 @@ export default function FrontdeskLabBillingLabOnlyPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Lab Billing Details</h1>
-        <Button asChild variant="outline">
-          <Link href={visitListBackHref}>Back</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="default"
+            onClick={startNewBill}
+          >
+            New Bill
+          </Button>
+          <Button variant="outline" onClick={goBack}>
+            Back
+          </Button>
+        </div>
       </div>
 
       {loading ? (
@@ -492,33 +541,83 @@ export default function FrontdeskLabBillingLabOnlyPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Lab Test Items</CardTitle>
-              <CardDescription>
-                Search Admin {"->"} Lab Tests, add lines, then generate or update the bill.
-              </CardDescription>
+              <CardTitle>Lab Bill History</CardTitle>
+              <CardDescription>Recent lab bills for this patient.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="mb-4 rounded-xl border border-blue-100 bg-slate-50/60 p-4 shadow-sm">
-                <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
-                  <div className="grid min-w-[min(100%,18rem)] flex-1 gap-2 sm:max-w-md">
-                    <Label>Add lab test</Label>
-                    <SearchableCombobox
-                      options={catalog.map((t) => ({
-                        value: t._id,
-                        label: `${t.name} - ${formatCurrency(Number(t.price) || 0)}`,
-                        keywords: t.name,
-                      }))}
-                      value={selectedLabTestId}
-                      onValueChange={setSelectedLabTestId}
-                      placeholder="Search or select lab test"
-                      searchPlaceholder="Type to filter..."
-                      emptyMessage="No lab tests match."
-                    />
-                  </div>
-                  <Button type="button" className="shrink-0" onClick={addLabTest}>
-                    Add lab test
-                  </Button>
+              {billHistory.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No previous lab bills found.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Bill date</TableHead>
+                      <TableHead>Tests</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead>Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {billHistory.map((historyBill) => (
+                      <TableRow key={historyBill._id}>
+                        <TableCell>
+                          {historyBill.billedAt ? format(new Date(historyBill.billedAt), "dd MMM yyyy, HH:mm") : "-"}
+                        </TableCell>
+                        <TableCell>{historyBill.items?.length ?? 0}</TableCell>
+                        <TableCell>{formatCurrency(Number(historyBill.grandTotal) || 0)}</TableCell>
+                        <TableCell>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setBill(historyBill);
+                              hydrateFromStoredBill(historyBill, catalog);
+                              setEditingBill(false);
+                            }}
+                          >
+                            Open Bill
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card ref={itemsSectionRef}>
+            <CardHeader>
+              <CardTitle>Lab Test Items</CardTitle>
+              {bill?.billedAt ? (
+                <CardDescription>
+                  Bill date and time: {format(new Date(bill.billedAt), "dd MMM yyyy, HH:mm")}
+                </CardDescription>
+              ) : (
+                <CardDescription>New lab bill</CardDescription>
+              )}
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+                <div className="grid min-w-[min(100%,18rem)] flex-1 gap-2 sm:max-w-md">
+                  <Label>Add lab test</Label>
+                  <SearchableCombobox
+                    options={catalog.map((t) => ({
+                      value: t._id,
+                      label: `${t.name} - ${formatCurrency(Number(t.price) || 0)}`,
+                      keywords: t.name,
+                    }))}
+                    value={selectedLabTestId}
+                    onValueChange={setSelectedLabTestId}
+                    placeholder="Search or select lab test"
+                    searchPlaceholder="Type to filter..."
+                    emptyMessage="No lab tests match."
+                  />
                 </div>
+                <Button type="button" className="shrink-0" onClick={addLabTest}>
+                  Add lab test
+                </Button>
               </div>
 
               {items.length === 0 ? (

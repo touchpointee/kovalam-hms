@@ -32,6 +32,7 @@ const schema = z.object({
     .refine((value) => isValidMobileNumber(value), "Enter a valid 10-digit mobile number"),
   address: z.string().optional(),
   bloodGroup: z.enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "Unknown"]).optional(),
+  registrationType: z.enum(["op", "lab", "pharmacy"]).default("op"),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -39,6 +40,7 @@ type FormData = z.infer<typeof schema>;
 type Patient = {
   _id: string;
   regNo: string;
+  registrationType?: "op" | "lab" | "pharmacy";
   name: string;
   age: number;
   gender: string;
@@ -61,11 +63,12 @@ export default function RegisterPage() {
 
   const { register, handleSubmit, formState: { errors }, reset, setValue, watch } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { gender: "male", bloodGroup: "Unknown" },
+    defaultValues: { gender: "male", bloodGroup: "Unknown", registrationType: "op" },
   });
   const phoneField = register("phone");
   const gender = watch("gender");
   const bloodGroup = watch("bloodGroup");
+  const registrationType = watch("registrationType");
 
   const fetchPatients = async (targetPage: number, query: string) => {
     setLoadingList(true);
@@ -104,6 +107,14 @@ export default function RegisterPage() {
       toast.success(`Patient registered. Reg No: ${json.regNo}`);
       reset();
       setShowAddPatient(false);
+      if (data.registrationType === "lab") {
+        window.location.href = `/frontdesk/lab-billing/lab-only/${json._id}`;
+        return;
+      }
+      if (data.registrationType === "pharmacy") {
+        window.location.href = `/frontdesk/medicine-billing/direct/${json._id}`;
+        return;
+      }
       fetchPatients(1, search);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to register");
@@ -116,7 +127,7 @@ export default function RegisterPage() {
     <div className="op-page">
       <div>
         <h1 className="op-title">Patient Search</h1>
-        <p className="op-subtitle">Find patients quickly and open OP visit</p>
+        <p className="op-subtitle">Find patients quickly and open OP, lab-only, or medicine-only billing</p>
       </div>
 
       <Card className="rounded-2xl border-blue-100">
@@ -184,6 +195,20 @@ export default function RegisterPage() {
                   <Textarea rows={2} {...register("address")} />
                 </div>
                 <div>
+                  <Label className="op-field-label">Registration flow *</Label>
+                  <Select
+                    value={registrationType}
+                    onValueChange={(v) => setValue("registrationType", v as FormData["registrationType"])}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="op">OP Visit</SelectItem>
+                      <SelectItem value="lab">Lab Only</SelectItem>
+                      <SelectItem value="pharmacy">Medicine Only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
                   <Label className="op-field-label">Blood Group</Label>
                   <Select value={bloodGroup ?? "Unknown"} onValueChange={(v) => setValue("bloodGroup", v as FormData["bloodGroup"])}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
@@ -196,7 +221,7 @@ export default function RegisterPage() {
                 </div>
                 <div className="flex items-end">
                   <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? "Saving..." : "Save Patient"}
+                    {loading ? "Saving..." : registrationType === "lab" ? "Register and Open Lab Billing" : registrationType === "pharmacy" ? "Register and Open Medicine Billing" : "Save Patient"}
                   </Button>
                 </div>
               </form>
@@ -228,9 +253,12 @@ export default function RegisterPage() {
                     </div>
                     <p className="text-sm text-slate-600">Age: {p.age}</p>
                     <p className="text-sm text-slate-600">{p.phone}</p>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <Button asChild className="w-full" size="sm">
                         <Link href={`/frontdesk/visit?patientId=${p._id}`}>Create Visit</Link>
+                      </Button>
+                      <Button asChild variant="secondary" className="w-full" size="sm">
+                        <Link href={`/frontdesk/medicine-billing/direct/${p._id}`}>Medicine Only</Link>
                       </Button>
                       <Button asChild variant="outline" className="w-full" size="sm">
                         <Link href={`/frontdesk/patients/${p._id}`}>Open Details</Link>

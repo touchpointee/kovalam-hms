@@ -62,7 +62,7 @@ type Visit = {
 type PatientDetail = {
   _id: string;
   regNo: string;
-  registrationType?: "op" | "lab";
+  registrationType?: "op" | "lab" | "pharmacy";
   name: string;
   age: number;
   gender: string;
@@ -133,6 +133,15 @@ type CombinedBill = {
   generatedByName?: string;
   paymentMethodLabel?: string;
 };
+
+function resolvePatientRegistrationType(patient: PatientDetail | null): "op" | "lab" | "pharmacy" {
+  const explicit = patient?.registrationType;
+  if (explicit === "lab" || explicit === "pharmacy" || explicit === "op") return explicit;
+  const regNo = patient?.regNo?.trim().toUpperCase() ?? "";
+  if (regNo.startsWith("LAB")) return "lab";
+  if (regNo.startsWith("PHRM")) return "pharmacy";
+  return "op";
+}
 
 function toDatetimeLocalValue(value: string | Date) {
   const d = value instanceof Date ? value : new Date(value);
@@ -350,6 +359,12 @@ export default function FrontdeskPatientDetailPage() {
   }, [id, loadPatient, visitDialogOpen]);
 
   useEffect(() => {
+    if (!patient?._id) return;
+    if (resolvePatientRegistrationType(patient) !== "lab") return;
+    router.replace(`/frontdesk/lab-billing/lab-only/${patient._id}`);
+  }, [patient, router]);
+
+  useEffect(() => {
     fetch("/api/procedures", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => setAllProcedures(Array.isArray(data) ? data : []))
@@ -374,7 +389,9 @@ export default function FrontdeskPatientDetailPage() {
   }, []);
 
   const visits = useMemo(() => patient?.visits ?? [], [patient]);
-  const isLabRegistration = patient?.registrationType === "lab";
+  const resolvedRegistrationType = useMemo(() => resolvePatientRegistrationType(patient), [patient]);
+  const isLabRegistration = resolvedRegistrationType === "lab";
+  const isPharmacyRegistration = resolvedRegistrationType === "pharmacy";
 
   const applyVisitToPrintState = useCallback((visitData: PrintableVisit) => {
     const combined = buildCombinedBillFromStoredVisit(visitData);
@@ -399,6 +416,10 @@ export default function FrontdeskPatientDetailPage() {
   const openCreateVisit = () => {
     if (isLabRegistration && patient?._id) {
       router.push(`/frontdesk/lab-billing/lab-only/${patient._id}`);
+      return;
+    }
+    if (isPharmacyRegistration && patient?._id) {
+      router.push(`/frontdesk/medicine-billing/direct/${patient._id}`);
       return;
     }
     setEditingVisit(null);
@@ -625,6 +646,10 @@ export default function FrontdeskPatientDetailPage() {
   };
 
   const openPrintPreview = useCallback(async (visitId: string) => {
+    if (isLabRegistration && patient?._id) {
+      router.push(`/frontdesk/lab-billing/lab-only/${patient._id}`);
+      return;
+    }
     setPrintingVisitId(visitId);
     try {
       const res = await fetch(`/api/visits/${visitId}`, { cache: "no-store" });
@@ -642,12 +667,16 @@ export default function FrontdeskPatientDetailPage() {
     } finally {
       setPrintingVisitId(null);
     }
-  }, [applyVisitToPrintState]);
+  }, [applyVisitToPrintState, isLabRegistration, patient?._id, router]);
 
   const saveVisit = async () => {
     if (!patient?._id || visitSaveInFlightRef.current) return;
     if (isLabRegistration) {
       toast.error("Lab registrations should use lab billing instead of OP visit creation");
+      return;
+    }
+    if (isPharmacyRegistration) {
+      toast.error("Medicine-only registrations should use direct medicine billing");
       return;
     }
     visitSaveInFlightRef.current = true;
@@ -709,18 +738,32 @@ export default function FrontdeskPatientDetailPage() {
     );
   }
 
+  const backHref = isLabRegistration
+    ? "/frontdesk/lab-register"
+    : isPharmacyRegistration
+      ? "/frontdesk/medicine-billing"
+      : "/frontdesk/register";
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Patient Details</h1>
-          <p className="text-sm text-muted-foreground">Frontdesk view</p>
+          <p className="text-sm text-muted-foreground">
+            {isLabRegistration
+              ? "Lab registration"
+              : isPharmacyRegistration
+                ? "Medicine-only registration"
+                : "Frontdesk view"}
+          </p>
         </div>
         <div className="flex gap-2">
           <Button asChild variant="outline">
-            <Link href="/frontdesk/register">Back</Link>
+            <Link href={backHref}>Back</Link>
           </Button>
-          <Button onClick={openCreateVisit}>Add Visit Data</Button>
+          <Button onClick={openCreateVisit}>
+            {isLabRegistration ? "Open Lab Billing" : isPharmacyRegistration ? "Open Medicine Billing" : "Add Visit Data"}
+          </Button>
         </div>
       </div>
 
@@ -738,6 +781,28 @@ export default function FrontdeskPatientDetailPage() {
         </CardContent>
       </Card>
 
+      {isLabRegistration ? (
+        <Card className="border-blue-100">
+          <CardHeader>
+            <CardTitle>Lab Billing</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            <p className="text-muted-foreground">
+              This patient is a lab-only registration. Consultation and OP visit options are not used here.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild>
+                <Link href={`/frontdesk/lab-billing/lab-only/${patient._id}`}>Open Lab Billing</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/frontdesk/lab-billing">Back to Lab Billing</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {!isLabRegistration && (
       <Card className="border-blue-100">
         <CardHeader>
           <CardTitle>Visit History</CardTitle>
@@ -775,13 +840,15 @@ export default function FrontdeskPatientDetailPage() {
                           Edit
                         </Button>
                         <Button type="button" size="sm" variant="outline" onClick={() => void openPrintPreview(v._id)}>
-                          {printingVisitId === v._id ? "Loading…" : "Print Bill"}
+                          {printingVisitId === v._id ? "Loading…" : isLabRegistration ? "Open Lab Bill" : "Print Bill"}
                         </Button>
-                        <Button asChild size="sm" variant="outline">
-                          <Link href={`/doctor/patients/${patient._id}/consultation?visitId=${v._id}`}>
-                            Open Consultation
-                          </Link>
-                        </Button>
+                        {!isLabRegistration ? (
+                          <Button asChild size="sm" variant="outline">
+                            <Link href={`/doctor/patients/${patient._id}/consultation?visitId=${v._id}`}>
+                              Open Consultation
+                            </Link>
+                          </Button>
+                        ) : null}
                         <Button
                           type="button"
                           size="sm"
@@ -802,7 +869,8 @@ export default function FrontdeskPatientDetailPage() {
           )}
         </CardContent>
       </Card>
-      {(combinedBill || printVisit) && (
+      )}
+      {!isLabRegistration && (combinedBill || printVisit) && (
         <div id="consultation-bill-preview">
           <PrintLayout
             title={combinedBill ? "OP consultation receipt" : "Consultation Bill"}
@@ -932,6 +1000,7 @@ export default function FrontdeskPatientDetailPage() {
           </PrintLayout>
         </div>
       )}
+      {!isLabRegistration && !isPharmacyRegistration && (
       <Dialog
         open={visitDialogOpen}
         onOpenChange={(open) => {
@@ -1345,6 +1414,7 @@ export default function FrontdeskPatientDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      )}
     </div>
   );
 }

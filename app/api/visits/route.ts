@@ -25,6 +25,7 @@ export const GET = withRouteLog("visits.GET", async (req: NextRequest) => {
     const patientId = searchParams.get("patientId");
     const statusParam = searchParams.get("status");
     const includeProcedureBills = searchParams.get("includeProcedureBills") === "true";
+    const includeMedicineBills = searchParams.get("includeMedicineBills") === "true";
     const includeLabBills = searchParams.get("includeLabBills") === "true";
     const outstandingOp = searchParams.get("outstandingOp");
 
@@ -83,7 +84,7 @@ export const GET = withRouteLog("visits.GET", async (req: NextRequest) => {
       return NextResponse.json(visits);
     }
 
-    if (!includeProcedureBills && !includeLabBills) {
+    if (!includeProcedureBills && !includeMedicineBills && !includeLabBills) {
       return NextResponse.json(visits);
     }
 
@@ -109,6 +110,30 @@ export const GET = withRouteLog("visits.GET", async (req: NextRequest) => {
           billedAt: bill.billedAt,
         });
         procedureBillsByVisit.set(visitKey, existing);
+      }
+    }
+
+    const medicineBillsByVisit = new Map<string, Array<{ _id: string; grandTotal?: number; billedAt?: Date }>>();
+    if (includeMedicineBills) {
+      const MedicineBill = (await import("@/models/MedicineBill")).default;
+      const medicineBills = await MedicineBill.find({ visit: { $in: visitIds } })
+        .select("_id visit grandTotal billedAt")
+        .lean();
+      for (const bill of medicineBills as Array<{
+        _id: { toString(): string };
+        visit?: { toString(): string };
+        grandTotal?: number;
+        billedAt?: Date;
+      }>) {
+        const visitKey = bill.visit?.toString();
+        if (!visitKey) continue;
+        const existing = medicineBillsByVisit.get(visitKey) ?? [];
+        existing.push({
+          _id: bill._id.toString(),
+          grandTotal: bill.grandTotal,
+          billedAt: bill.billedAt,
+        });
+        medicineBillsByVisit.set(visitKey, existing);
       }
     }
 
@@ -138,6 +163,7 @@ export const GET = withRouteLog("visits.GET", async (req: NextRequest) => {
         return {
           ...visit,
           ...(includeProcedureBills ? { procedureBills: procedureBillsByVisit.get(id) ?? [] } : {}),
+          ...(includeMedicineBills ? { medicineBills: medicineBillsByVisit.get(id) ?? [] } : {}),
           ...(includeLabBills ? { labBill: labBillByVisit.get(id) ?? null } : {}),
         };
       })
