@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
 import { Trash2 } from "lucide-react";
@@ -62,6 +62,7 @@ type Visit = {
 type PatientDetail = {
   _id: string;
   regNo: string;
+  registrationType?: "op" | "lab";
   name: string;
   age: number;
   gender: string;
@@ -262,6 +263,7 @@ function buildCombinedBillFromStoredVisit(data: PrintableVisit): CombinedBill | 
 
 export default function FrontdeskPatientDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params.id as string;
   const [patient, setPatient] = useState<PatientDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -372,6 +374,7 @@ export default function FrontdeskPatientDetailPage() {
   }, []);
 
   const visits = useMemo(() => patient?.visits ?? [], [patient]);
+  const isLabRegistration = patient?.registrationType === "lab";
 
   const applyVisitToPrintState = useCallback((visitData: PrintableVisit) => {
     const combined = buildCombinedBillFromStoredVisit(visitData);
@@ -394,6 +397,10 @@ export default function FrontdeskPatientDetailPage() {
   };
 
   const openCreateVisit = () => {
+    if (isLabRegistration && patient?._id) {
+      router.push(`/frontdesk/lab-billing/lab-only/${patient._id}`);
+      return;
+    }
     setEditingVisit(null);
     setVDate(toDatetimeLocalValue(new Date()));
     resetClinicalFields();
@@ -639,6 +646,10 @@ export default function FrontdeskPatientDetailPage() {
 
   const saveVisit = async () => {
     if (!patient?._id || visitSaveInFlightRef.current) return;
+    if (isLabRegistration) {
+      toast.error("Lab registrations should use lab billing instead of OP visit creation");
+      return;
+    }
     visitSaveInFlightRef.current = true;
     setSavingVisit(true);
     const wasEditing = !!editingVisit?._id;
@@ -1131,7 +1142,8 @@ export default function FrontdeskPatientDetailPage() {
                     const updateMs = (patch: Partial<typeof ms>) =>
                       setMedSearchStates((prev) => {
                         const next = [...prev];
-                        next[idx] = { ...ms, ...patch };
+                        const current = next[idx] ?? { suggestions: [], open: false };
+                        next[idx] = { ...current, ...patch };
                         return next;
                       });
                     const handleMedSearch = (q: string) => {
@@ -1161,32 +1173,41 @@ export default function FrontdeskPatientDetailPage() {
                     return (
                     <div key={idx} className="rounded-md border p-3 space-y-2">
                       <div className="flex flex-wrap gap-2">
-                        {/* Medicine name with search dropdown */}
-                        <div className="relative min-w-[8rem] flex-1">
+                        {/* Medicine name with inline suggestions */}
+                        <div className="min-w-[8rem] flex-1 space-y-1">
                           <Input
                             placeholder="Search medicine or type name *"
                             value={row.medicineName}
                             onChange={(e) => handleMedSearch(e.target.value)}
-                            onFocus={() => { if (row.medicineName.trim()) updateMs({ open: true }); }}
+                            onFocus={() => {
+                              if (row.medicineName.trim()) updateMs({ open: true });
+                            }}
                             onBlur={() => setTimeout(() => updateMs({ open: false }), 150)}
                             className="w-full"
                             autoComplete="off"
                           />
-                          {ms.open && ms.suggestions.length > 0 && (
-                            <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border bg-white shadow-lg">
-                              {ms.suggestions.map((med) => (
-                                <button
-                                  key={med._id}
-                                  type="button"
-                                  className="flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
-                                  onMouseDown={(e) => { e.preventDefault(); pickMedicine(med); }}
-                                >
-                                  <span className="font-medium">{med.name}</span>
-                                  {med.genericName && (
-                                    <span className="text-xs text-muted-foreground">{med.genericName}</span>
-                                  )}
-                                </button>
-                              ))}
+                          {ms.open && row.medicineName.trim() && (
+                            <div className="max-h-56 overflow-y-auto overscroll-contain rounded-md border bg-white py-1 shadow-sm">
+                              {ms.suggestions.length > 0 ? (
+                                ms.suggestions.map((med) => (
+                                  <button
+                                    key={med._id}
+                                    type="button"
+                                    className="flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      pickMedicine(med);
+                                    }}
+                                  >
+                                    <span className="font-medium">{med.name}</span>
+                                    {med.genericName && (
+                                      <span className="text-xs text-muted-foreground">{med.genericName}</span>
+                                    )}
+                                  </button>
+                                ))
+                              ) : (
+                                <p className="px-3 py-2 text-sm text-muted-foreground">No medicines found.</p>
+                              )}
                             </div>
                           )}
                         </div>
