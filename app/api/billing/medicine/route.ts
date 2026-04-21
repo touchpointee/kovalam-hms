@@ -22,6 +22,8 @@ const itemSchema = z.object({
   quantity: z.number().int().min(1),
   sellingPrice: z.number().min(0),
   lineOffer: z.coerce.number().min(0).optional(),
+  frequency: z.string().optional(),
+  duration: z.string().optional(),
 });
 
 const postSchema = z.object({
@@ -46,11 +48,20 @@ export const POST = withRouteLog("billing.medicine.POST", async (req: NextReques
     const parsed = postSchema.safeParse({
       ...body,
       items: (body.items ?? []).map(
-        (i: { medicineStockId: string; quantity: number; sellingPrice: number; lineOffer?: number }) => ({
+        (i: {
+          medicineStockId: string;
+          quantity: number;
+          sellingPrice: number;
+          lineOffer?: number;
+          frequency?: string;
+          duration?: string;
+        }) => ({
           medicineStockId: i.medicineStockId,
           quantity: typeof i.quantity === "number" ? i.quantity : parseInt(String(i.quantity), 10),
           sellingPrice: Number(i.sellingPrice),
           lineOffer: typeof i.lineOffer === "number" ? i.lineOffer : undefined,
+          frequency: typeof i.frequency === "string" ? i.frequency : undefined,
+          duration: typeof i.duration === "string" ? i.duration : undefined,
         })
       ),
       billOffer: typeof body.billOffer === "number" ? body.billOffer : undefined,
@@ -90,6 +101,8 @@ export const POST = withRouteLog("billing.medicine.POST", async (req: NextReques
       mrp: number;
       sellingPrice: number;
       lineOffer: number;
+      frequency?: string;
+      duration?: string;
       totalPrice: number;
     }> = [];
     for (const item of parsed.data.items) {
@@ -119,6 +132,8 @@ export const POST = withRouteLog("billing.medicine.POST", async (req: NextReques
       billItems.push({
         medicineStock: item.medicineStockId,
         medicineName,
+        frequency: item.frequency?.trim() || undefined,
+        duration: item.duration?.trim() || undefined,
         batchNo: stock.batchNo,
         expiryDate: stock.expiryDate,
         quantity: item.quantity,

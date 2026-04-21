@@ -107,6 +107,8 @@ export const PUT = withRouteLog("billing.medicine.billId.PUT", async (
     const billItems: Array<{
       medicineStock: string;
       medicineName: string;
+      frequency?: string;
+      duration?: string;
       batchNo: string;
       expiryDate: Date;
       quantity: number;
@@ -157,6 +159,8 @@ export const PUT = withRouteLog("billing.medicine.billId.PUT", async (
       billItems.push({
         medicineStock: item.medicineStockId,
         medicineName,
+        frequency: String(item.frequency ?? "").trim() || undefined,
+        duration: String(item.duration ?? "").trim() || undefined,
         batchNo: stock.batchNo,
         expiryDate: stock.expiryDate,
         quantity,
@@ -273,6 +277,63 @@ export const PUT = withRouteLog("billing.medicine.billId.PUT", async (
 
     if (!updated) return NextResponse.json({ message: "Bill not found" }, { status: 404 });
     return NextResponse.json(updated);
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json(
+      { message: e instanceof Error ? e.message : "Server error" },
+      { status: 500 }
+    );
+  }
+});
+
+export const DELETE = withRouteLog("billing.medicine.billId.DELETE", async (
+  _req: NextRequest,
+  { params }: { params: Promise<{ billId: string }> }
+) => {
+  try {
+    await dbConnect();
+    const session = await getServerSession(authOptions);
+    if (!session?.user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    const forbidden = requireRole(session, ["admin", "pharmacy", "frontdesk"]);
+    if (forbidden) return forbidden;
+
+    const { billId } = await params;
+    if (!mongoose.Types.ObjectId.isValid(billId)) {
+      return NextResponse.json({ message: "Invalid ID" }, { status: 400 });
+    }
+    const bill = await MedicineBill.findById(billId).lean() as {
+      _id: mongoose.Types.ObjectId;
+      visit?: mongoose.Types.ObjectId;
+      items?: Array<{ medicineStock?: mongoose.Types.ObjectId; quantity?: number }>;
+    } | null;
+    if (!bill) return NextResponse.json({ message: "Bill not found" }, { status: 404 });
+
+    // Restore medicine stock quantities
+    for (const item of bill.items ?? []) {
+      if (!item.medicineStock || !item.quantity) continue;
+      const stock = await MedicineStock.findById(item.medicineStock);
+      if (!stock) continue;
+      const prevQty = stock.currentStock;
+      stock.currentStock += item.quantity;
+      stock.quantityOut = Math.max(0, stock.quantityOut - item.quantity);
+      stock.updatedAt = new Date();
+      await stock.save();
+      await StockTransaction.create({
+        medicineStock: stock._id,
+        medicine: stock.medicine,
+        inventoryType: stock.inventoryType ?? "pharmacy",
+        transactionType: "in",
+        quantity: item.quantity,
+        previousQuantity: prevQty,
+        newQuantity: stock.currentStock,
+        reason: "Medicine bill deleted",
+        referenceNumber: String(bill.visit ?? billId),
+        performedBy: (session.user as { id?: string }).id,
+      });
+    }
+
+    await MedicineBill.findByIdAndDelete(billId);
+    return NextResponse.json({ ok: true });
   } catch (e) {
     console.error(e);
     return NextResponse.json(

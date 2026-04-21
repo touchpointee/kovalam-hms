@@ -19,8 +19,8 @@ export function PrintLayout({
 }) {
   const paperClass =
     paper === "portrait"
-      ? "bill-paper-portrait max-w-[148mm]"
-      : "bill-paper-landscape max-w-[210mm]";
+      ? "bill-paper-portrait max-w-[210mm]"
+      : "bill-paper-landscape max-w-[297mm]";
 
   return (
     <div className="print-container bill-print-root">
@@ -41,11 +41,11 @@ export function PrintLayout({
             </div>
 
             <div className="min-w-0 px-1">
-              <p className="font-serif text-[18px] font-bold uppercase leading-tight tracking-wide sm:text-[20px]">
+              <p className="font-serif text-[22px] font-bold uppercase leading-tight tracking-wide sm:text-[26px]">
                 <span className="text-[#a61f28]">Doctor&apos;s</span>{" "}
                 <span className="text-[#263f86]">Medical Center</span>
               </p>
-              <div className="mt-1 text-[9px] leading-tight text-slate-800 sm:text-[10px]">
+              <div className="mt-1 text-[11px] leading-tight text-slate-800 sm:text-[13px]">
                 <p>(TC 58/2993/1, PARAVILA, PACHALLOOR P.O, THIRUVANANTHAPURAM)</p>
                 <p>PH: 0471-3170428, 8089056433</p>
               </div>
@@ -61,13 +61,13 @@ export function PrintLayout({
 
         <div className="print-letterhead-footer absolute inset-x-2 bottom-1 z-10 pb-0">
           <div className="print-letterhead-footer-inner mx-auto max-w-full text-center">
-            <div className="print-letterhead-bluebar mx-auto flex h-[14px] max-w-full items-center justify-center bg-[#263f86] px-2 text-[8px] font-semibold uppercase tracking-[0.28em] text-white sm:text-[9px] sm:tracking-[0.35em]">
+            <div className="print-letterhead-bluebar mx-auto flex h-[18px] max-w-full items-center justify-center bg-[#263f86] px-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white sm:text-[13px] sm:tracking-[0.35em]">
               Your Health Our Priority
             </div>
-            <div className="print-letterhead-redbar mx-auto mt-1.5 max-w-full bg-[#a61f28] px-2 py-0.5 text-[7px] font-semibold uppercase leading-snug tracking-[0.08em] text-white sm:text-[8px]">
+            <div className="print-letterhead-redbar mx-auto mt-1.5 max-w-full bg-[#a61f28] px-2 py-0.5 text-[10px] font-semibold uppercase leading-snug tracking-[0.08em] text-white sm:text-[11px]">
               Working Hours : 7:00 AM to 8:00 PM | Sundays : 7:00 AM to 2:00 PM
             </div>
-            <p className="mt-1.5 text-[10px] font-medium text-slate-700 sm:text-[11px]">
+            <p className="mt-1.5 text-[12px] font-medium text-slate-700 sm:text-[14px]">
               <a href={`mailto:${hospitalEmail}`} className="underline-offset-2 print:text-slate-800 print:no-underline">
                 {hospitalEmail}
               </a>

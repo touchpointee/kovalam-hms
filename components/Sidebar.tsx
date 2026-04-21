@@ -120,6 +120,7 @@ const groupsByRole: Record<Role, NavGroup[]> = {
       items: [
         { href: "/admin/pharmacy/medicine-categories", label: "Medicine Categories", icon: <Tags className="h-4 w-4" /> },
         { href: "/admin/pharmacy/medicine-groups", label: "Medicine Groups", icon: <Tags className="h-4 w-4" /> },
+        { href: "/admin/pharmacy/medicine-frequencies", label: "Medicine Frequencies", icon: <Tags className="h-4 w-4" /> },
         { href: "/admin/pharmacy/manufacturers", label: "Manufacturers", icon: <Factory className="h-4 w-4" /> },
         { href: "/admin/pharmacy/suppliers", label: "Suppliers", icon: <Truck className="h-4 w-4" /> },
         { href: "/admin/pharmacy/store-stock", label: "Store Stock Management", icon: <Boxes className="h-4 w-4" /> },

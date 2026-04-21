@@ -23,6 +23,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { cn, formatCurrency } from "@/lib/utils";
 import { Search } from "lucide-react";
+import { SearchableCombobox } from "@/components/SearchableCombobox";
 import {
   Table,
   TableBody,
@@ -148,6 +149,7 @@ export default function ConsultationPage() {
   const [allLabTests, setAllLabTests] = useState<LabTest[]>([]);
   const [medicineSearch, setMedicineSearch] = useState("");
   const [medicineResults, setMedicineResults] = useState<{ _id: string; name: string }[]>([]);
+  const [frequencies, setFrequencies] = useState<{ value: string; label: string }[]>([]);
   const [history, setHistory] = useState<HistoryVisit[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -214,6 +216,7 @@ export default function ConsultationPage() {
   useEffect(() => {
     fetch("/api/procedures", { cache: "no-store" }).then((res) => res.json()).then(setAllProcedures).catch(() => setAllProcedures([]));
     fetch("/api/lab-tests", { cache: "no-store" }).then((res) => res.json()).then(setAllLabTests).catch(() => setAllLabTests([]));
+    fetch("/api/medicine-frequencies", { cache: "no-store" }).then((res) => res.json()).then(list => setFrequencies(Array.isArray(list) ? list.map((f: any) => ({ value: f.name, label: f.name })) : [])).catch(() => setFrequencies([]));
   }, []);
 
   useEffect(() => {
@@ -617,15 +620,34 @@ export default function ConsultationPage() {
                 <div><Label>Dosage</Label><Input className="op-input" value={newMed.dosage} disabled={isServed} onChange={(e) => setNewMed((m) => ({ ...m, dosage: e.target.value }))} placeholder="e.g. 500mg" /></div>
                 <div>
                   <Label>Frequency</Label>
-                  <Input
-                    className="op-input"
+                  <SearchableCombobox
+                    options={frequencies}
                     value={newMed.frequency}
                     disabled={isServed}
-                    onChange={(e) => setNewMed((m) => ({ ...m, frequency: e.target.value }))}
-                    placeholder="e.g. OD / morning-evening"
+                    onValueChange={(val) => setNewMed((m) => ({ ...m, frequency: val }))}
+                    placeholder="OD / BD"
+                    searchPlaceholder="Search frequency…"
+                    emptyMessage="No exact match."
+                    triggerClassName="w-full"
                   />
                 </div>
-                <div><Label>Duration</Label><Input className="op-input" value={newMed.duration} disabled={isServed} onChange={(e) => setNewMed((m) => ({ ...m, duration: e.target.value }))} placeholder="e.g. 5 days" /></div>
+                <div>
+                  <Label>Duration</Label>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      min="1"
+                      className="op-input pr-12"
+                      value={newMed.duration.replace(/[^0-9]/g, "")}
+                      disabled={isServed}
+                      onChange={(e) => setNewMed((m) => ({ ...m, duration: e.target.value ? `${e.target.value} days` : "" }))}
+                      placeholder="e.g. 5"
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                      days
+                    </span>
+                  </div>
+                </div>
                 <div><Label>Instructions</Label><Input className="op-input" value={newMed.instructions} disabled={isServed} onChange={(e) => setNewMed((m) => ({ ...m, instructions: e.target.value }))} /></div>
               </div>
               <Button className="op-button-primary" type="button" onClick={addMedicine} disabled={saving || isServed}>

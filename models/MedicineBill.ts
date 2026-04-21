@@ -5,6 +5,8 @@ const medicineBillItemSchema = new mongoose.Schema(
   {
     medicineStock: { type: mongoose.Schema.Types.ObjectId, ref: "MedicineStock", required: true },
     medicineName: { type: String, required: true },
+    frequency: { type: String, trim: true },
+    duration: { type: String, trim: true },
     batchNo: { type: String, required: true },
     expiryDate: { type: Date, required: true },
     quantity: { type: Number, required: true },

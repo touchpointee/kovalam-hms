@@ -11,6 +11,7 @@ const COLLECTIONS_TO_CLEAR = [
   "stocktransactions",
   "medicines",
   "manufacturers",
+  "medicinefrequencies",
   "suppliers",
   "medicinecategories",
   "medicinegroups",

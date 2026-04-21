@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { format } from "date-fns";
+import toast from "react-hot-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,13 +30,17 @@ type Visit = {
 };
 
 export default function PharmacyBillingPage() {
+  const { data: session } = useSession();
   const medicineBillingBase = useMedicineBillingBase();
+  const canDeleteBill =
+    session?.user?.role === "admin" || session?.user?.role === "pharmacy" || session?.user?.role === "frontdesk";
   const [todayVisits, setTodayVisits] = useState<Visit[]>([]);
   const [pharmacyOnlyPatients, setPharmacyOnlyPatients] = useState<Patient[]>([]);
   const [directBillsByPatient, setDirectBillsByPatient] = useState<
     Record<string, { _id: string; grandTotal?: number } | null>
   >({});
   const [directBillsLoading, setDirectBillsLoading] = useState(false);
+  const [deletingBillId, setDeletingBillId] = useState("");
 
   const loadTodayVisits = () => {
     const today = format(new Date(), "yyyy-MM-dd");
@@ -84,6 +90,25 @@ export default function PharmacyBillingPage() {
     loadTodayVisits();
     loadDirectSalePatients();
   }, []);
+
+  const deleteBill = async (billId: string) => {
+    if (!billId) return;
+    if (!window.confirm("Are you sure you want to delete this bill? This action cannot be undone.")) return;
+
+    setDeletingBillId(billId);
+    try {
+      const res = await fetch(`/api/billing/medicine/${billId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? "Failed to delete bill");
+      toast.success("Medicine bill deleted");
+      loadTodayVisits();
+      loadDirectSalePatients();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete bill");
+    } finally {
+      setDeletingBillId("");
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -153,11 +178,23 @@ export default function PharmacyBillingPage() {
                         {directBillsLoading ? "-" : hasBill ? formatCurrency(Number(bill?.grandTotal) || 0) : "-"}
                       </TableCell>
                       <TableCell>
-                        <Button asChild size="sm" variant="outline">
-                          <Link href={`${medicineBillingBase}/direct/${patient._id}`}>
-                            {hasBill ? "Open Bill" : "Create Bill"}
-                          </Link>
-                        </Button>
+                        <div className="flex flex-wrap gap-2">
+                          <Button asChild size="sm" variant="outline">
+                            <Link href={`${medicineBillingBase}/direct/${patient._id}`}>
+                              {hasBill ? "Open Bill" : "Create Bill"}
+                            </Link>
+                          </Button>
+                          {bill?._id && canDeleteBill ? (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => deleteBill(bill._id)}
+                              disabled={deletingBillId === bill._id}
+                            >
+                              {deletingBillId === bill._id ? "Deleting..." : "Delete"}
+                            </Button>
+                          ) : null}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -211,11 +248,23 @@ export default function PharmacyBillingPage() {
                       <TableCell>{hasBill ? formatCurrency(Number(latestBill?.grandTotal) || 0) : "-"}</TableCell>
                       <TableCell>
                         {v.patient?._id ? (
-                          <Button asChild size="sm" variant="outline">
-                            <Link href={`${medicineBillingBase}/${v._id}`}>
-                              {hasBill ? "Open Bill" : "Bill This Visit"}
-                            </Link>
-                          </Button>
+                          <div className="flex flex-wrap gap-2">
+                            <Button asChild size="sm" variant="outline">
+                              <Link href={`${medicineBillingBase}/${v._id}`}>
+                                {hasBill ? "Open Bill" : "Bill This Visit"}
+                              </Link>
+                            </Button>
+                            {latestBill?._id && canDeleteBill ? (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => deleteBill(latestBill._id)}
+                                disabled={deletingBillId === latestBill._id}
+                              >
+                                {deletingBillId === latestBill._id ? "Deleting..." : "Delete"}
+                              </Button>
+                            ) : null}
+                          </div>
                         ) : (
                           "-"
                         )}

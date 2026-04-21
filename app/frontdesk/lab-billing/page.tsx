@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import toast from "react-hot-toast";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ export default function FrontdeskLabBillingPage() {
     Record<string, { _id: string; grandTotal?: number } | null>
   >({});
   const [labOnlyBillsLoading, setLabOnlyBillsLoading] = useState(false);
+  const [deletingBillId, setDeletingBillId] = useState("");
 
   const loadTodayVisits = () => {
     const today = format(new Date(), "yyyy-MM-dd");
@@ -83,6 +85,25 @@ export default function FrontdeskLabBillingPage() {
     loadTodayVisits();
     loadLabOnlyPatients();
   }, []);
+
+  const deleteBill = async (billId: string) => {
+    if (!billId) return;
+    if (!window.confirm("Are you sure you want to delete this bill? This action cannot be undone.")) return;
+
+    setDeletingBillId(billId);
+    try {
+      const res = await fetch(`/api/laboratory/bills/${billId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? "Failed to delete lab bill");
+      toast.success("Lab bill deleted");
+      loadTodayVisits();
+      loadLabOnlyPatients();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete lab bill");
+    } finally {
+      setDeletingBillId("");
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -145,11 +166,23 @@ export default function FrontdeskLabBillingPage() {
                       </TableCell>
                       <TableCell>
                         {visit.patient?._id ? (
-                          <Button asChild size="sm" variant="outline">
-                            <Link href={`/frontdesk/lab-billing/${visit._id}`}>
-                              {hasLab ? "Open Bill" : "Bill This Visit"}
-                            </Link>
-                          </Button>
+                          <div className="flex flex-wrap gap-2">
+                            <Button asChild size="sm" variant="outline">
+                              <Link href={`/frontdesk/lab-billing/${visit._id}`}>
+                                {hasLab ? "Open Bill" : "Bill This Visit"}
+                              </Link>
+                            </Button>
+                            {visit.labBill?._id ? (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => deleteBill(visit.labBill!._id)}
+                                disabled={deletingBillId === visit.labBill!._id}
+                              >
+                                {deletingBillId === visit.labBill!._id ? "Deleting..." : "Delete"}
+                              </Button>
+                            ) : null}
+                          </div>
                         ) : (
                           "-"
                         )}
@@ -213,11 +246,23 @@ export default function FrontdeskLabBillingPage() {
                       {labOnlyBillsLoading ? "-" : hasBill ? formatCurrency(Number(bill?.grandTotal) || 0) : "-"}
                     </TableCell>
                     <TableCell>
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={`/frontdesk/lab-billing/lab-only/${patient._id}`}>
-                          {hasBill ? "Open Bill" : "Create Lab Bill"}
-                        </Link>
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`/frontdesk/lab-billing/lab-only/${patient._id}`}>
+                            {hasBill ? "Open Bill" : "Create Lab Bill"}
+                          </Link>
+                        </Button>
+                        {bill?._id ? (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => deleteBill(bill._id)}
+                            disabled={deletingBillId === bill._id}
+                          >
+                            {deletingBillId === bill._id ? "Deleting..." : "Delete"}
+                          </Button>
+                        ) : null}
+                      </div>
                     </TableCell>
                         </>
                       );

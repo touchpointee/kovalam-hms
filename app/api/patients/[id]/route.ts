@@ -20,12 +20,18 @@ import { withRouteLog } from "@/lib/with-route-log";
 import { isValidMobileNumber, normalizeMobileNumber } from "@/lib/mobile";
 
 function normalizeRegistrationType(patient: { registrationType?: string; regNo?: string }) {
-  if (patient.registrationType === "lab" || patient.registrationType === "pharmacy" || patient.registrationType === "op") {
+  if (
+    patient.registrationType === "lab" ||
+    patient.registrationType === "pharmacy" ||
+    patient.registrationType === "procedure" ||
+    patient.registrationType === "op"
+  ) {
     return patient.registrationType;
   }
   const regNo = patient.regNo?.trim().toUpperCase() ?? "";
   if (regNo.startsWith("LAB")) return "lab";
   if (regNo.startsWith("PHRM")) return "pharmacy";
+  if (regNo.startsWith("PROC")) return "procedure";
   return "op";
 }
 

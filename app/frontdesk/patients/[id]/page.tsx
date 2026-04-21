@@ -80,6 +80,8 @@ type DoctorOption = { _id: string; name: string };
 
 type MedicineOption = { _id: string; name: string; genericName?: string };
 
+type MedicineFrequencyOption = { _id: string; name: string };
+
 type MedRow = {
   medicine?: string;
   medicineName: string;
@@ -294,6 +296,7 @@ export default function FrontdeskPatientDetailPage() {
   const [medicineRows, setMedicineRows] = useState<MedRow[]>([emptyMedRow()]);
   const [notes, setNotes] = useState("");
   const [allDoctors, setAllDoctors] = useState<DoctorOption[]>([]);
+  const [medicineFrequencies, setMedicineFrequencies] = useState<MedicineFrequencyOption[]>([]);
   const [selectedDoctorId, setSelectedDoctorId] = useState("");
   // Per-row medicine search state
   const [medSearchStates, setMedSearchStates] = useState<
@@ -386,6 +389,13 @@ export default function FrontdeskPatientDetailPage() {
         setAllDoctors(list);
       })
       .catch(() => setAllDoctors([]));
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/medicine-frequencies", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data) => setMedicineFrequencies(Array.isArray(data) ? data : []))
+      .catch(() => setMedicineFrequencies([]));
   }, []);
 
   const visits = useMemo(() => patient?.visits ?? [], [patient]);
@@ -761,6 +771,16 @@ export default function FrontdeskPatientDetailPage() {
           <Button asChild variant="outline">
             <Link href={backHref}>Back</Link>
           </Button>
+          {!isLabRegistration && !isPharmacyRegistration && (
+            <>
+              <Button asChild variant="secondary">
+                <Link href={`/frontdesk/medicine-billing/direct/${patient._id}`}>Medicine Only</Link>
+              </Button>
+              <Button asChild variant="secondary">
+                <Link href={`/frontdesk/procedure-billing/direct/${patient._id}`}>Procedure Only</Link>
+              </Button>
+            </>
+          )}
           <Button onClick={openCreateVisit}>
             {isLabRegistration ? "Open Lab Billing" : isPharmacyRegistration ? "Open Medicine Billing" : "Add Visit Data"}
           </Button>
@@ -1309,7 +1329,7 @@ export default function FrontdeskPatientDetailPage() {
                           </Button>
                         )}
                       </div>
-                      <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="grid gap-2 sm:grid-cols-3">
                         <Input
                           placeholder="Dosage"
                           value={row.dosage}
@@ -1319,15 +1339,28 @@ export default function FrontdeskPatientDetailPage() {
                             )
                           }
                         />
-                        <Input
-                          placeholder="Frequency"
-                          value={row.frequency}
-                          onChange={(e) =>
+                        <Select
+                          value={row.frequency || undefined}
+                          onValueChange={(value) =>
                             setMedicineRows((rows) =>
-                              rows.map((r, i) => (i === idx ? { ...r, frequency: e.target.value } : r))
+                              rows.map((r, i) => (i === idx ? { ...r, frequency: value } : r))
                             )
                           }
-                        />
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Frequency" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {row.frequency && !medicineFrequencies.some((option) => option.name === row.frequency) ? (
+                              <SelectItem value={row.frequency}>{row.frequency}</SelectItem>
+                            ) : null}
+                            {medicineFrequencies.map((option) => (
+                              <SelectItem key={option._id} value={option.name}>
+                                {option.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <Input
                           placeholder="Duration"
                           value={row.duration}

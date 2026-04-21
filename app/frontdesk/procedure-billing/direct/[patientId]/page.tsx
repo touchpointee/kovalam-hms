@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, usePathname } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
@@ -30,19 +30,13 @@ import {
 } from "@/lib/bill-offers";
 
 type Patient = { _id: string; name: string; regNo: string; phone?: string; age?: number; address?: string };
-type Visit = {
-  _id: string;
-  visitDate: string;
-  receiptNo?: string;
-  patient?: Patient;
-  doctor?: { name?: string } | null;
-  procedureBills?: Array<{ _id: string }>;
-};
+
 type Procedure = {
   _id: string;
   name: string;
   price: number;
 };
+
 type ProcedureItem = {
   id: string;
   procedureId: string;
@@ -52,6 +46,7 @@ type ProcedureItem = {
   lineOffer: number;
   totalPrice: number;
 };
+
 type ProcedureBill = {
   _id: string;
   patient?: Patient;
@@ -82,23 +77,24 @@ type StoredProcedureBill = {
   grandTotal: number;
 };
 
-export default function FrontdeskVisitProcedureBillingPage() {
+export default function DirectProcedureBillingPage() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "admin";
-  const canEditProcedureBill = isAdmin || session?.user?.role === "frontdesk";
+  const role = session?.user?.role;
+  const canEditProcedureBill = isAdmin || role === "frontdesk";
   const pathname = usePathname();
-  const visitListBackHref = pathname.startsWith("/admin/") ? "/admin/visits" : "/frontdesk/procedure-billing";
-  const params = useParams<{ visitId: string }>();
-  const visitId = params?.visitId ?? "";
+  const visitListBackHref = pathname.startsWith("/admin/") ? "/admin/visits" : "/frontdesk/register";
+  const params = useParams<{ patientId: string }>();
+  const patientId = params?.patientId ?? "";
 
-  const [visit, setVisit] = useState<Visit | null>(null);
+  const [patient, setPatient] = useState<Patient | null>(null);
   const [procedures, setProcedures] = useState<Procedure[]>([]);
   const [items, setItems] = useState<ProcedureItem[]>([]);
   const [selectedProcedureId, setSelectedProcedureId] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [bill, setBill] = useState<ProcedureBill | null>(null);
-  const [editingBill, setEditingBill] = useState(false);
+  const [editingBill, setEditingBill] = useState(true);
   const [billOffer, setBillOffer] = useState(0);
   const [paymentMethodId, setPaymentMethodId] = useState("");
   const [generatedByName, setGeneratedByName] = useState("");
@@ -125,20 +121,20 @@ export default function FrontdeskVisitProcedureBillingPage() {
   }, []);
 
   useEffect(() => {
-    if (!visitId) return;
+    if (!patientId) return;
     setLoading(true);
 
     Promise.all([
-      fetch(`/api/visits/${visitId}`, { cache: "no-store" }).then((res) => res.json()),
+      fetch(`/api/patients/${patientId}`, { cache: "no-store" }).then((res) => res.json()),
       fetch("/api/procedures", { cache: "no-store" }).then((res) => res.json()),
     ])
-      .then(async ([visitData, procedureList]) => {
-        if (!visitData?._id || !visitData?.patient?._id) throw new Error("Visit not found");
-        setVisit(visitData as Visit);
+      .then(async ([patientData, procedureList]) => {
+        if (!patientData?._id) throw new Error("Patient not found");
+        setPatient(patientData as Patient);
         setProcedures(Array.isArray(procedureList) ? procedureList : []);
 
-        const existingBillId = Array.isArray(visitData.procedureBills) && visitData.procedureBills.length > 0
-          ? visitData.procedureBills[0]?._id
+        const existingBillId = Array.isArray(patientData.procedureBills) && patientData.procedureBills.length > 0
+          ? patientData.procedureBills[0]?._id
           : undefined;
 
         if (existingBillId) {
@@ -149,6 +145,7 @@ export default function FrontdeskVisitProcedureBillingPage() {
           hydrateStoredBillItems(storedBill as StoredProcedureBill);
         } else {
           setBill(null);
+          setItems([]);
           setBillOffer(0);
           setPaymentMethodId("");
           setGeneratedByName("");
@@ -156,13 +153,13 @@ export default function FrontdeskVisitProcedureBillingPage() {
         }
       })
       .catch((error) => {
-        setVisit(null);
+        setPatient(null);
         setProcedures([]);
         setItems([]);
-        toast.error(error instanceof Error ? error.message : "Failed to load visit");
+        toast.error(error instanceof Error ? error.message : "Failed to load patient");
       })
       .finally(() => setLoading(false));
-  }, [hydrateStoredBillItems, visitId]);
+  }, [hydrateStoredBillItems, patientId]);
 
   const addProcedure = () => {
     if (!selectedProcedureId) {
@@ -230,7 +227,7 @@ export default function FrontdeskVisitProcedureBillingPage() {
   );
 
   const saveBill = async () => {
-    if (!visit?.patient?._id || items.length === 0) {
+    if (!patient?._id || items.length === 0) {
       toast.error("Add at least one procedure");
       return;
     }
@@ -244,13 +241,11 @@ export default function FrontdeskVisitProcedureBillingPage() {
     }
     setSubmitting(true);
     try {
-      const isUpdate = Boolean(bill?._id);
-      const res = await fetch(isUpdate ? `/api/billing/procedure/${bill?._id}` : "/api/billing/procedure", {
-        method: isUpdate ? "PUT" : "POST",
+      const res = await fetch("/api/billing/procedure", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          patientId: visit.patient._id,
-          visitId: visit._id,
+          patientId: patient._id,
           billOffer,
           ...(grandTotal > 0 && paymentMethodId.trim()
             ? { paymentMethodId: paymentMethodId.trim() }
@@ -267,7 +262,7 @@ export default function FrontdeskVisitProcedureBillingPage() {
       if (!res.ok) throw new Error(data?.message ?? "Failed to save bill");
       setBill(data as ProcedureBill);
       setEditingBill(false);
-      toast.success(isUpdate ? "Procedure bill updated" : "Procedure bill generated");
+      toast.success("Procedure bill generated");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to save bill");
     } finally {
@@ -311,10 +306,12 @@ export default function FrontdeskVisitProcedureBillingPage() {
           <div className="flex items-center gap-2">
             <Button variant="default" onClick={() => window.print()}>Print</Button>
             <Button asChild variant="outline">
-              <Link href={visitListBackHref}>Back to Visit List</Link>
+              <Link href={visitListBackHref}>Back</Link>
             </Button>
             {canEditProcedureBill && (
-              <Button variant="outline" onClick={() => setEditingBill(true)}>Edit Bill</Button>
+              <Button variant="outline" onClick={() => {
+                setEditingBill(true);
+              }}>Edit Bill</Button>
             )}
             {isAdmin && (
               <Button variant="destructive" onClick={deleteBill} disabled={submitting}>
@@ -334,24 +331,15 @@ export default function FrontdeskVisitProcedureBillingPage() {
             </div>
             <div className="space-y-2">
               <div className="grid grid-cols-[150px_1fr]">
-                <span>Consultation date and time</span>
-                <span>
-                  :{" "}
-                  {visit?.visitDate
-                    ? format(new Date(visit.visitDate), "dd MMM yyyy, HH:mm")
-                    : "—"}
-                </span>
-              </div>
-              <div className="grid grid-cols-[150px_1fr]">
                 <span>Bill date and time</span>
                 <span>
                   : {bill.billedAt ? format(new Date(bill.billedAt), "dd MMM yyyy, HH:mm") : "—"}
                 </span>
               </div>
               <div className="grid grid-cols-[150px_1fr]"><span>Age</span><span>: {bill.patient?.age ?? "-"}</span></div>
-              <div className="grid grid-cols-[150px_1fr]">
+              <div className="grid grid-cols-[150px_1fr] invisible">
                 <span>Consultant Doctor</span>
-                <span>: {visit?.doctor?.name?.trim() ? visit.doctor.name : "—"}</span>
+                <span>: —</span>
               </div>
             </div>
           </div>
@@ -434,26 +422,25 @@ export default function FrontdeskVisitProcedureBillingPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Procedure Billing Details</h1>
+        <h1 className="text-2xl font-semibold">Direct Procedure Billing</h1>
         <Button asChild variant="outline">
           <Link href={visitListBackHref}>Back</Link>
         </Button>
       </div>
 
       {loading ? (
-        <Card><CardContent className="pt-6 text-sm text-muted-foreground">Loading visit details...</CardContent></Card>
-      ) : !visit ? (
-        <Card><CardContent className="pt-6 text-sm text-muted-foreground">Visit not found.</CardContent></Card>
+        <Card><CardContent className="pt-6 text-sm text-muted-foreground">Loading patient details...</CardContent></Card>
+      ) : !patient ? (
+        <Card><CardContent className="pt-6 text-sm text-muted-foreground">Patient not found.</CardContent></Card>
       ) : (
         <>
           <Card>
             <CardHeader>
-              <CardTitle>Visit</CardTitle>
-              <CardDescription>Procedure billing is locked to this visit only</CardDescription>
+              <CardTitle>Patient Selected</CardTitle>
+              <CardDescription>Directly billing procedures without an active visit</CardDescription>
             </CardHeader>
             <CardContent className="text-sm">
-              <p><strong>Patient:</strong> {visit.patient?.name} ({visit.patient?.regNo})</p>
-              <p><strong>Receipt:</strong> {visit.receiptNo ?? "-"} | <strong>Time:</strong> {format(new Date(visit.visitDate), "dd MMM yyyy, HH:mm")}</p>
+              <p><strong>Patient:</strong> {patient.name} ({patient.regNo})</p>
             </CardContent>
           </Card>
 
@@ -577,7 +564,7 @@ export default function FrontdeskVisitProcedureBillingPage() {
                   <div className="mt-4 flex items-center justify-between">
                     <p className="text-sm font-semibold">Net total: {formatCurrency(grandTotal)}</p>
                     <Button onClick={saveBill} disabled={submitting || items.length === 0}>
-                      {submitting ? (bill ? "Updating..." : "Generating...") : (bill ? "Update Bill" : "Generate Bill")}
+                      {submitting ? "Generating..." : "Generate Bill"}
                     </Button>
                   </div>
                 </>

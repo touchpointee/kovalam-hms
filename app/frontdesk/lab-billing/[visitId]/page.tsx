@@ -326,17 +326,23 @@ export default function FrontdeskLabBillingVisitPage() {
     }
   };
 
-  const clearLabBill = async () => {
-    if (!visit?.patient?._id || !bill?._id) return;
+  const deleteBill = async () => {
+    if (!bill?._id) return;
+    if (!window.confirm("Are you sure you want to delete this bill? This action cannot be undone.")) return;
+
     setSubmitting(true);
     try {
-      await postLabItems([], 0);
+      const res = await fetch(`/api/laboratory/bills/${bill._id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? "Failed to delete lab bill");
       setBill(null);
       hydrateFromStoredBill(null, catalog);
       setEditingBill(true);
-      toast.success("Lab bill cleared");
+      toast.success("Lab bill deleted");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to clear lab bill");
+      toast.error(e instanceof Error ? e.message : "Failed to delete lab bill");
     } finally {
       setSubmitting(false);
     }
@@ -358,6 +364,11 @@ export default function FrontdeskLabBillingVisitPage() {
             {canAdjustLabBill && (
               <Button variant="outline" onClick={() => setEditingBill(true)}>
                 Edit Bill
+              </Button>
+            )}
+            {canAdjustLabBill && (
+              <Button variant="destructive" onClick={deleteBill} disabled={submitting}>
+                {submitting ? "Deleting..." : "Delete Bill"}
               </Button>
             )}
           </div>
@@ -653,8 +664,8 @@ export default function FrontdeskLabBillingVisitPage() {
                     <p className="text-sm font-semibold">Net total: {formatCurrency(grandTotal)}</p>
                     <div className="flex flex-wrap items-center gap-2">
                       {canAdjustLabBill && bill?._id ? (
-                        <Button type="button" variant="outline" onClick={clearLabBill} disabled={submitting}>
-                          {submitting ? "Saving..." : "Clear lab bill"}
+                        <Button type="button" variant="destructive" onClick={deleteBill} disabled={submitting}>
+                          {submitting ? "Deleting..." : "Delete Bill"}
                         </Button>
                       ) : null}
                       <Button onClick={saveBill} disabled={submitting || items.length === 0}>

@@ -5,7 +5,7 @@ const bloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "Unknown"
 const patientSchema = new mongoose.Schema(
   {
     regNo: { type: String, required: true, unique: true },
-    registrationType: { type: String, enum: ["op", "lab", "pharmacy"], default: "op" },
+    registrationType: { type: String, enum: ["op", "lab", "pharmacy", "procedure"], default: "op" },
     name: { type: String, required: true },
     age: { type: Number, required: true },
     gender: { type: String, required: true, enum: ["male", "female", "other"] },

@@ -219,13 +219,13 @@
 
   /* Bills */
   @page bill-landscape {
-    size: A5 landscape;
-    margin: 3mm;
+    size: A4 landscape;
+    margin: 5mm;
   }
 
   @page bill-portrait {
-    size: A5 portrait;
-    margin: 3mm;
+    size: A4 portrait;
+    margin: 5mm;
   }
 
   html {
@@ -402,8 +402,8 @@
   #report-content table,
   #report-content th,
   #report-content td {
-    font-size: 9px;
-    padding: 2px 4px;
+    font-size: 13px;
+    padding: 6px 8px;
   }
 
   /* Normal flow: fixed header/footer repeat on every printed page and caused an empty page 2 */

@@ -386,6 +386,7 @@ function buildExcelWorkbook(
         "medicines",
         "medicinebills",
         "medicinecategories",
+        "medicinefrequencies",
         "medicinegroups",
         "manufacturers",
         "suppliers",

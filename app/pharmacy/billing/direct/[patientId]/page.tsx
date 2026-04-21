@@ -67,6 +67,8 @@ type BillItem = {
   stockStatus: "in_stock" | "no_stock";
   availableBatches: StockBatch[];
   source: "prescription" | "manual";
+  frequency: string;
+  duration: string;
 };
 type MedicineBill = {
   _id: string;
@@ -99,10 +101,46 @@ type StoredMedicineBill = {
     sellingPrice: number;
     totalPrice: number;
     lineOffer?: number;
+    frequency?: string;
+    duration?: string;
   }>;
   grandTotal: number;
   billOffer?: number;
 };
+
+function calculateSuggestedQuantity(frequency: string, durationStr: string): number | null {
+  const daysMatch = durationStr.match(/(\d+)/);
+  if (!daysMatch) return null;
+  const days = parseInt(daysMatch[1], 10);
+  if (isNaN(days) || days <= 0) return null;
+
+  const f = (frequency || "").toLowerCase().trim();
+  let dailyDoses = 0;
+
+  if (/^(\d)(?:-|\+)(\d)(?:-|\+)(\d)(?:-|\+)(\d)$/.test(f)) {
+    const match = f.match(/^(\d)(?:-|\+)(\d)(?:-|\+)(\d)(?:-|\+)(\d)$/)!;
+    dailyDoses = parseInt(match[1]) + parseInt(match[2]) + parseInt(match[3]) + parseInt(match[4]);
+  } else if (/^(\d)(?:-|\+)(\d)(?:-|\+)(\d)$/.test(f)) {
+    const match = f.match(/^(\d)(?:-|\+)(\d)(?:-|\+)(\d)$/)!;
+    dailyDoses = parseInt(match[1]) + parseInt(match[2]) + parseInt(match[3]);
+  } else if (/^(\d)(?:-|\+)(\d)$/.test(f)) {
+    const match = f.match(/^(\d)(?:-|\+)(\d)$/)!;
+    dailyDoses = parseInt(match[1]) + parseInt(match[2]);
+  } else if (f.includes("qid") || f.includes("q.i.d")) {
+    dailyDoses = 4;
+  } else if (f.includes("tds") || f.includes("tid") || f.includes("t.i.d") || f.includes("thrice")) {
+    dailyDoses = 3;
+  } else if (f.includes("bd") || f.includes("bid") || f.includes("b.i.d") || f.includes("twice")) {
+    dailyDoses = 2;
+  } else if (f.includes("od") || f.includes("o.d") || f.includes("daily") || f.includes("once")) {
+    dailyDoses = 1;
+  }
+
+  if (dailyDoses > 0) {
+    return Math.ceil(dailyDoses * days);
+  }
+  return null;
+}
 
 export default function DirectMedicineBillingPage() {
   const { data: session } = useSession();
@@ -120,6 +158,7 @@ export default function DirectMedicineBillingPage() {
   const [prescription, setPrescription] = useState<Prescription | null>(null);
   const [items, setItems] = useState<BillItem[]>([]);
   const [medicineOptions, setMedicineOptions] = useState<MedicineOption[]>([]);
+  const [frequencies, setFrequencies] = useState<{ value: string; label: string }[]>([]);
   const [selectedMedicineId, setSelectedMedicineId] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -133,7 +172,7 @@ export default function DirectMedicineBillingPage() {
   const backHref = isFrontdeskDirectSale ? "/frontdesk/register" : visitListBackHref;
   const backLabel = isFrontdeskDirectSale ? "Back to Registration" : "Back to Medicine Billing";
 
-  const buildBillItem = (medicineId: string | undefined, medicineName: string, batches: StockBatch[], source: "prescription" | "manual"): BillItem => {
+  const buildBillItem = (medicineId: string | undefined, medicineName: string, batches: StockBatch[], source: "prescription" | "manual", options?: { frequency?: string; duration?: string }): BillItem => {
     const availableBatches = [...batches]
       .filter((batch) => batch.currentStock > 0)
       .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
@@ -145,6 +184,8 @@ export default function DirectMedicineBillingPage() {
         medicineId,
         medicineStockId: undefined,
         medicineName,
+        frequency: options?.frequency?.trim() || "",
+        duration: options?.duration?.trim() || "",
         batchNo: "-",
         expiryDate: new Date().toISOString(),
         quantity: 0,
@@ -164,6 +205,8 @@ export default function DirectMedicineBillingPage() {
       medicineId,
       medicineStockId: batch._id,
       medicineName: batch.medicine?.name ?? medicineName,
+      frequency: options?.frequency?.trim() || "",
+      duration: options?.duration?.trim() || "",
       batchNo: batch.batchNo,
       expiryDate: batch.expiryDate,
       quantity: 1,
@@ -188,7 +231,7 @@ export default function DirectMedicineBillingPage() {
             : (stock?.medicine as { _id?: string } | undefined)?._id;
 
         if (!medicineId) {
-          return buildBillItem(undefined, item.medicineName, [], "manual");
+          return buildBillItem(undefined, item.medicineName, [], "manual", { frequency: item.frequency, duration: item.duration });
         }
 
         const batchesRes = await fetch(`/api/stock?medicineId=${medicineId}&inventoryType=pharmacy`, { cache: "no-store" });
@@ -196,7 +239,7 @@ export default function DirectMedicineBillingPage() {
         const availableBatches = (batches ?? []).filter((batch) => batch.currentStock > 0);
         const selectedBatch = availableBatches.find((batch) => batch._id === stock?._id);
         if (!selectedBatch) {
-          return buildBillItem(medicineId, item.medicineName, batches ?? [], "manual");
+          return buildBillItem(medicineId, item.medicineName, batches ?? [], "manual", { frequency: item.frequency, duration: item.duration });
         }
 
         const q = Math.min(item.quantity, selectedBatch.currentStock);
@@ -208,6 +251,8 @@ export default function DirectMedicineBillingPage() {
           medicineId,
           medicineStockId: selectedBatch._id,
           medicineName: item.medicineName,
+          frequency: item.frequency?.trim() || "",
+          duration: item.duration?.trim() || "",
           batchNo: selectedBatch.batchNo,
           expiryDate: selectedBatch.expiryDate,
           quantity: q,
@@ -237,9 +282,11 @@ export default function DirectMedicineBillingPage() {
     Promise.all([
       fetch(`/api/patients/${patientId}`, { cache: "no-store" }).then((res) => res.json()),
       fetch("/api/medicines", { cache: "no-store" }).then((res) => res.json()),
+      fetch("/api/medicine-frequencies", { cache: "no-store" }).then((res) => res.json()).catch(() => []),
     ])
-      .then(async ([visitData, medicineList]) => {
+      .then(async ([visitData, medicineList, freqList]) => {
         setMedicineOptions(Array.isArray(medicineList) ? medicineList : []);
+        setFrequencies(Array.isArray(freqList) ? freqList.map((f: any) => ({ value: f.name, label: f.name })) : []);
         if (!visitData?._id) {
           throw new Error("Patient not found");
         }
@@ -351,6 +398,34 @@ export default function DirectMedicineBillingPage() {
     setItems((prev) => prev.filter((_, itemIndex) => itemIndex !== idx));
   };
 
+  const updateItemFrequency = (idx: number, value: string) => {
+    setItems((prev) => prev.map((row, itemIndex) => {
+      if (itemIndex !== idx) return row;
+      const nextRow = { ...row, frequency: value };
+      const suggested = calculateSuggestedQuantity(value, nextRow.duration);
+      if (suggested !== null && nextRow.stockStatus === 'in_stock') {
+        const qty = Math.min(suggested, nextRow.currentStock);
+        nextRow.quantity = Math.max(1, qty);
+        nextRow.totalPrice = lineNetAfterOffer(nextRow.sellingPrice * nextRow.quantity, nextRow.lineOffer);
+      }
+      return nextRow;
+    }));
+  };
+
+  const updateItemDuration = (idx: number, value: string) => {
+    setItems((prev) => prev.map((row, itemIndex) => {
+      if (itemIndex !== idx) return row;
+      const nextRow = { ...row, duration: value };
+      const suggested = calculateSuggestedQuantity(nextRow.frequency, value);
+      if (suggested !== null && nextRow.stockStatus === 'in_stock') {
+        const qty = Math.min(suggested, nextRow.currentStock);
+        nextRow.quantity = Math.max(1, qty);
+        nextRow.totalPrice = lineNetAfterOffer(nextRow.sellingPrice * nextRow.quantity, nextRow.lineOffer);
+      }
+      return nextRow;
+    }));
+  };
+
   const billableItems = useMemo(
     () => items.filter((i) => i.stockStatus === "in_stock" && i.medicineStockId && i.quantity > 0),
     [items]
@@ -396,6 +471,8 @@ export default function DirectMedicineBillingPage() {
             medicineStockId: i.medicineStockId,
             quantity: i.quantity,
             sellingPrice: i.sellingPrice,
+            frequency: i.frequency.trim() || undefined,
+            duration: i.duration.trim() || undefined,
             ...(i.lineOffer > 0 ? { lineOffer: i.lineOffer } : {}),
           })),
         }),
@@ -511,6 +588,13 @@ export default function DirectMedicineBillingPage() {
                     <td className="border border-slate-400 px-3 py-2 align-top">{i + 1}</td>
                     <td className="border border-slate-400 px-3 py-2 align-top">
                       <div>{row.medicineName}</div>
+                      {row.frequency || row.duration ? (
+                        <div className="mt-1 text-[13px] text-slate-600">
+                          {row.frequency ? `Freq: ${row.frequency}` : ""}
+                          {row.frequency && row.duration ? " | " : ""}
+                          {row.duration ? `Duration: ${row.duration}` : ""}
+                        </div>
+                      ) : null}
                     </td>
                     <td className="border border-slate-400 px-3 py-2 text-center align-top">{row.quantity}</td>
                     <td className="border border-slate-400 px-3 py-2 text-right align-top">{formatCurrency(row.sellingPrice)}</td>
@@ -650,6 +734,8 @@ export default function DirectMedicineBillingPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Medicine</TableHead>
+                          <TableHead>Frequency</TableHead>
+                          <TableHead>Duration</TableHead>
                           <TableHead>Batch</TableHead>
                           <TableHead>Expiry</TableHead>
                           <TableHead>Qty</TableHead>
@@ -663,6 +749,32 @@ export default function DirectMedicineBillingPage() {
                         {items.map((row, idx) => (
                           <TableRow key={row.id}>
                             <TableCell>{row.medicineName}</TableCell>
+                            <TableCell>
+                              <SearchableCombobox
+                                options={frequencies}
+                                value={row.frequency}
+                                onValueChange={(val) => updateItemFrequency(idx, val)}
+                                placeholder="Frequency"
+                                searchPlaceholder="Search…"
+                                emptyMessage="No match."
+                                triggerClassName="h-9 min-w-[8rem]"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <div className="relative min-w-[8rem]">
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  value={row.duration.replace(/[^0-9]/g, "")}
+                                  onChange={(e) => updateItemDuration(idx, e.target.value ? `${e.target.value} days` : "")}
+                                  placeholder="0"
+                                  className="pr-12"
+                                />
+                                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                                  days
+                                </span>
+                              </div>
+                            </TableCell>
                             <TableCell>
                               {row.stockStatus === "no_stock" ? (
                                 "-"

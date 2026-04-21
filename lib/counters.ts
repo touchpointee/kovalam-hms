@@ -5,6 +5,7 @@ import OPVisit from "@/models/OPVisit";
 const REG_NO_PREFIX = "DMC";
 const LAB_REG_NO_PREFIX = "LAB";
 const PHARM_REG_NO_PREFIX = "PHRM";
+const PROC_REG_NO_PREFIX = "PROC";
 
 export async function generateRegNo(): Promise<string> {
   return generateRegNoWithPrefix(REG_NO_PREFIX);
@@ -16,6 +17,10 @@ export async function generateLabRegNo(): Promise<string> {
 
 export async function generatePharmacyRegNo(): Promise<string> {
   return generateRegNoWithPrefix(PHARM_REG_NO_PREFIX);
+}
+
+export async function generateProcedureRegNo(): Promise<string> {
+  return generateRegNoWithPrefix(PROC_REG_NO_PREFIX);
 }
 
 async function generateRegNoWithPrefix(prefix: string): Promise<string> {

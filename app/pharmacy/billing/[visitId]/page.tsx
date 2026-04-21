@@ -448,6 +448,25 @@ export default function VisitMedicineBillingPage() {
     }
   };
 
+  const deleteBill = async () => {
+    if (!bill?._id) return;
+    if (!window.confirm("Are you sure you want to delete this bill? This action cannot be undone.")) return;
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/billing/medicine/${bill._id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? "Failed to delete bill");
+      toast.success("Medicine bill deleted");
+      window.location.reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete bill");
+      setSubmitting(false);
+    }
+  };
+
   const getExpiryBadge = (expiryDate: string) => {
     const days = differenceInDays(new Date(expiryDate), new Date());
     if (days < 0) return <Badge className="bg-red-600">Expired</Badge>;
@@ -471,6 +490,11 @@ export default function VisitMedicineBillingPage() {
             {canEditMedicineBill && (
               <Button variant="outline" onClick={() => setEditingBill(true)}>
                 Edit Bill
+              </Button>
+            )}
+            {isAdmin && (
+              <Button variant="destructive" onClick={deleteBill} disabled={submitting}>
+                {submitting ? "Deleting..." : "Delete Bill"}
               </Button>
             )}
           </div>
@@ -814,9 +838,16 @@ export default function VisitMedicineBillingPage() {
                     />
                     <div className="mt-4 flex items-center justify-between">
                       <p className="text-sm font-semibold">Net total: {formatCurrency(grandTotal)}</p>
-                      <Button onClick={generateBill} disabled={submitting || billableItems.length === 0}>
-                        {submitting ? (bill ? "Updating..." : "Generating...") : (bill ? "Update Bill" : "Generate Bill")}
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        {isAdmin && bill?._id ? (
+                          <Button type="button" variant="destructive" onClick={deleteBill} disabled={submitting}>
+                            {submitting ? "Deleting..." : "Delete Bill"}
+                          </Button>
+                        ) : null}
+                        <Button onClick={generateBill} disabled={submitting || billableItems.length === 0}>
+                          {submitting ? (bill ? "Updating..." : "Generating...") : (bill ? "Update Bill" : "Generate Bill")}
+                        </Button>
+                      </div>
                     </div>
                   </>
                 )}
