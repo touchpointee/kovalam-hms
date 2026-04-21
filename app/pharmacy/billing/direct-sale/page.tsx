@@ -30,16 +30,51 @@ type BillItem = {
   quantity: number; mrp: number; sellingPrice: number;
   lineOffer: number; totalPrice: number; currentStock: number;
   stockStatus: "in_stock" | "no_stock"; availableBatches: StockBatch[];
+  frequency: string; duration: string;
 };
 type SavedBill = {
   _id: string;
   patient?: { _id: string; name: string; regNo: string; phone?: string; age?: number; address?: string };
   billedAt?: string; generatedByName?: string;
   billedBy?: { name?: string } | null;
-  items: Array<{ medicineName: string; batchNo: string; expiryDate: string; quantity: number; mrp: number; sellingPrice: number; totalPrice: number; lineOffer?: number }>;
+  items: Array<{ medicineName: string; batchNo: string; expiryDate: string; quantity: number; mrp: number; sellingPrice: number; totalPrice: number; lineOffer?: number; frequency?: string; duration?: string }>;
   grandTotal: number; billOffer?: number;
   paymentMethod?: { _id?: string; name?: string; code?: string } | null;
 };
+
+function calculateSuggestedQuantity(frequency: string, durationStr: string): number | null {
+  const daysMatch = durationStr.match(/(\d+)/);
+  if (!daysMatch) return null;
+  const days = parseInt(daysMatch[1], 10);
+  if (isNaN(days) || days <= 0) return null;
+
+  const f = (frequency || "").toLowerCase().trim();
+  let dailyDoses = 0;
+
+  if (/^(\d)(?:-|\+)(\d)(?:-|\+)(\d)(?:-|\+)(\d)$/.test(f)) {
+    const match = f.match(/^(\d)(?:-|\+)(\d)(?:-|\+)(\d)(?:-|\+)(\d)$/);
+    if (match) dailyDoses = parseInt(match[1]) + parseInt(match[2]) + parseInt(match[3]) + parseInt(match[4]);
+  } else if (/^(\d)(?:-|\+)(\d)(?:-|\+)(\d)$/.test(f)) {
+    const match = f.match(/^(\d)(?:-|\+)(\d)(?:-|\+)(\d)$/);
+    if (match) dailyDoses = parseInt(match[1]) + parseInt(match[2]) + parseInt(match[3]);
+  } else if (/^(\d)(?:-|\+)(\d)$/.test(f)) {
+    const match = f.match(/^(\d)(?:-|\+)(\d)$/);
+    if (match) dailyDoses = parseInt(match[1]) + parseInt(match[2]);
+  } else if (f.includes("qid") || f.includes("q.i.d")) {
+    dailyDoses = 4;
+  } else if (f.includes("tds") || f.includes("tid") || f.includes("t.i.d") || f.includes("thrice")) {
+    dailyDoses = 3;
+  } else if (f.includes("bd") || f.includes("bid") || f.includes("b.i.d") || f.includes("twice")) {
+    dailyDoses = 2;
+  } else if (f.includes("od") || f.includes("o.d") || f.includes("daily") || f.includes("once")) {
+    dailyDoses = 1;
+  }
+
+  if (dailyDoses > 0) {
+    return Math.ceil(dailyDoses * days);
+  }
+  return null;
+}
 
 export default function DirectSalePage() {
   const { data: session } = useSession();
@@ -57,6 +92,7 @@ export default function DirectSalePage() {
 
   // Medicine items
   const [medicineOptions, setMedicineOptions] = useState<{ _id: string; name: string }[]>([]);
+  const [frequencies, setFrequencies] = useState<Array<{ value: string; label: string }>>([]);
   const [selectedMedicineId, setSelectedMedicineId] = useState("");
   const [items, setItems] = useState<BillItem[]>([]);
 
@@ -71,6 +107,11 @@ export default function DirectSalePage() {
       .then((r) => r.json())
       .then((d) => setMedicineOptions(Array.isArray(d) ? d : []))
       .catch(() => {});
+
+    fetch("/api/medicine-frequencies", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setFrequencies(Array.isArray(d) ? d.map((f: { name: string }) => ({ value: f.name, label: f.name })) : []))
+      .catch(() => {});
   }, []);
 
   const buildItem = (medId: string | undefined, medName: string, batches: StockBatch[]): BillItem => {
@@ -82,6 +123,7 @@ export default function DirectSalePage() {
       return {
         id: `${medId ?? medName}-${Math.random().toString(36).slice(2)}`,
         medicineId: medId, medicineStockId: undefined, medicineName: medName,
+        frequency: "", duration: "",
         batchNo: "-", expiryDate: new Date().toISOString(), quantity: 0,
         mrp: 0, sellingPrice: 0, lineOffer: 0, totalPrice: 0, currentStock: 0,
         stockStatus: "no_stock", availableBatches: [],
@@ -91,6 +133,7 @@ export default function DirectSalePage() {
       id: `${medId ?? medName}-${batch._id}-${Math.random().toString(36).slice(2)}`,
       medicineId: medId, medicineStockId: batch._id,
       medicineName: batch.medicine?.name ?? medName,
+      frequency: "", duration: "",
       batchNo: batch.batchNo, expiryDate: batch.expiryDate, quantity: 1,
       mrp: batch.mrp, sellingPrice: batch.sellingPrice, lineOffer: 0,
       totalPrice: batch.sellingPrice, currentStock: batch.currentStock,
@@ -153,6 +196,34 @@ export default function DirectSalePage() {
     });
   };
 
+  const updateFrequency = (idx: number, value: string) => {
+    setItems((prev) => prev.map((row, itemIndex) => {
+      if (itemIndex !== idx) return row;
+      const nextRow = { ...row, frequency: value };
+      const suggested = calculateSuggestedQuantity(value, nextRow.duration);
+      if (suggested !== null && nextRow.stockStatus === "in_stock") {
+        const qty = Math.min(suggested, nextRow.currentStock);
+        nextRow.quantity = Math.max(1, qty);
+        nextRow.totalPrice = lineNetAfterOffer(nextRow.sellingPrice * nextRow.quantity, nextRow.lineOffer);
+      }
+      return nextRow;
+    }));
+  };
+
+  const updateDuration = (idx: number, value: string) => {
+    setItems((prev) => prev.map((row, itemIndex) => {
+      if (itemIndex !== idx) return row;
+      const nextRow = { ...row, duration: value };
+      const suggested = calculateSuggestedQuantity(nextRow.frequency, value);
+      if (suggested !== null && nextRow.stockStatus === "in_stock") {
+        const qty = Math.min(suggested, nextRow.currentStock);
+        nextRow.quantity = Math.max(1, qty);
+        nextRow.totalPrice = lineNetAfterOffer(nextRow.sellingPrice * nextRow.quantity, nextRow.lineOffer);
+      }
+      return nextRow;
+    }));
+  };
+
   const billableItems = useMemo(
     () => items.filter((i) => i.stockStatus === "in_stock" && i.medicineStockId && i.quantity > 0),
     [items]
@@ -204,6 +275,8 @@ export default function DirectSalePage() {
             medicineStockId: i.medicineStockId,
             quantity: i.quantity,
             sellingPrice: i.sellingPrice,
+            frequency: i.frequency.trim() || undefined,
+            duration: i.duration.trim() || undefined,
             ...(i.lineOffer > 0 ? { lineOffer: i.lineOffer } : {}),
           })),
         }),
@@ -278,7 +351,16 @@ export default function DirectSalePage() {
               {savedBill.items.map((row, i) => (
                 <tr key={i}>
                   <td className="border border-slate-400 px-3 py-2">{i + 1}</td>
-                  <td className="border border-slate-400 px-3 py-2">{row.medicineName}</td>
+                  <td className="border border-slate-400 px-3 py-2">
+                    <div>{row.medicineName}</div>
+                    {row.frequency || row.duration ? (
+                      <div className="mt-1 text-[13px] text-slate-600">
+                        {row.frequency ? `Freq: ${row.frequency}` : ""}
+                        {row.frequency && row.duration ? " | " : ""}
+                        {row.duration ? `Duration: ${row.duration}` : ""}
+                      </div>
+                    ) : null}
+                  </td>
                   <td className="border border-slate-400 px-3 py-2 text-center">{row.quantity}</td>
                   <td className="border border-slate-400 px-3 py-2 text-right">{formatCurrency(row.sellingPrice)}</td>
                   <td className="border border-slate-400 px-3 py-2 text-right">{Number(row.lineOffer) > 0 ? formatCurrency(Number(row.lineOffer)) : "—"}</td>
@@ -369,6 +451,8 @@ export default function DirectSalePage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Medicine</TableHead>
+                  <TableHead>Frequency</TableHead>
+                  <TableHead>Duration</TableHead>
                   <TableHead>Batch</TableHead>
                   <TableHead>Expiry</TableHead>
                   <TableHead>Qty</TableHead>
@@ -382,6 +466,32 @@ export default function DirectSalePage() {
                 {items.map((row, idx) => (
                   <TableRow key={row.id}>
                     <TableCell>{row.medicineName}</TableCell>
+                    <TableCell>
+                      <SearchableCombobox
+                        options={frequencies}
+                        value={row.frequency}
+                        onValueChange={(value) => updateFrequency(idx, value)}
+                        placeholder="Frequency"
+                        searchPlaceholder="Search..."
+                        emptyMessage="No match."
+                        triggerClassName="h-9 min-w-[8rem]"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="relative min-w-[8rem]">
+                        <Input
+                          type="number"
+                          min="1"
+                          value={row.duration.replace(/[^0-9]/g, "")}
+                          onChange={(e) => updateDuration(idx, e.target.value ? `${e.target.value} days` : "")}
+                          placeholder="0"
+                          className="pr-12"
+                        />
+                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                          days
+                        </span>
+                      </div>
+                    </TableCell>
                     <TableCell>
                       {row.stockStatus === "no_stock" ? "-" : (
                         <SearchableCombobox
