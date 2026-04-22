@@ -6,9 +6,11 @@ import { getServerSession } from "next-auth";
 import { requireAuth, requireRole } from "@/lib/api-auth";
 import MedicineFrequency from "@/models/MedicineFrequency";
 import { withRouteLog } from "@/lib/with-route-log";
+import { inferDosesPerDayFromFrequencyName } from "@/lib/medicine-frequency";
 
 const schema = z.object({
   name: z.string().min(1),
+  dosesPerDay: z.coerce.number().positive().max(24).nullable().optional(),
 });
 
 export const GET = withRouteLog("medicineFrequencies.GET", async (req: NextRequest) => {
@@ -60,7 +62,12 @@ export const POST = withRouteLog("medicineFrequencies.POST", async (req: NextReq
       return NextResponse.json({ message: "Frequency already exists" }, { status: 400 });
     }
 
-    const row = await MedicineFrequency.create({ name });
+    const dosesPerDay =
+      parsed.data.dosesPerDay ?? inferDosesPerDayFromFrequencyName(name) ?? undefined;
+    const row = await MedicineFrequency.create({
+      name,
+      ...(dosesPerDay ? { dosesPerDay } : {}),
+    });
     return NextResponse.json(row.toJSON());
   } catch (error) {
     console.error(error);

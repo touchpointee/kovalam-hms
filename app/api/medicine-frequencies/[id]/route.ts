@@ -5,9 +5,11 @@ import { dbConnect } from "@/lib/mongoose";
 import { requireAuth, requireRole } from "@/lib/api-auth";
 import MedicineFrequency from "@/models/MedicineFrequency";
 import { withRouteLog } from "@/lib/with-route-log";
+import { inferDosesPerDayFromFrequencyName } from "@/lib/medicine-frequency";
 
 const schema = z.object({
   name: z.string().min(1).optional(),
+  dosesPerDay: z.coerce.number().positive().max(24).nullable().optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -35,6 +37,12 @@ export const PUT = withRouteLog("medicineFrequencies.id.PUT", async (
 
     const update: Record<string, unknown> = {};
     if (parsed.data.name !== undefined) update.name = parsed.data.name.trim();
+    if (parsed.data.dosesPerDay !== undefined) {
+      update.dosesPerDay = parsed.data.dosesPerDay;
+    } else if (parsed.data.name !== undefined) {
+      const inferred = inferDosesPerDayFromFrequencyName(parsed.data.name.trim());
+      if (inferred) update.dosesPerDay = inferred;
+    }
     if (parsed.data.isActive !== undefined) update.isActive = parsed.data.isActive;
 
     const row = await MedicineFrequency.findByIdAndUpdate(id, { $set: update }, { new: true }).lean();

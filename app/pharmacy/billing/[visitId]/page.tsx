@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -30,6 +30,10 @@ import {
 import { X } from "lucide-react";
 import { useMedicineBillingListHref } from "@/hooks/usePharmacyBase";
 import { BillingStaffSelect, getBillingStaffDisplayName } from "@/components/BillingStaffSelect";
+import {
+  calculateSuggestedTabletQuantity,
+  type MedicineFrequencyOption,
+} from "@/lib/medicine-frequency";
 
 type Patient = { _id: string; name: string; regNo: string; phone?: string; age?: number; address?: string };
 type Visit = {
@@ -50,7 +54,7 @@ type MedicineOption = {
   _id: string;
   name: string;
 };
-type FrequencyOption = {
+type FrequencyOption = MedicineFrequencyOption & {
   value: string;
   label: string;
 };
@@ -120,40 +124,6 @@ type StoredMedicineBill = {
   billOffer?: number;
 };
 
-function calculateSuggestedQuantity(frequency: string, durationStr: string): number | null {
-  const daysMatch = durationStr.match(/(\d+)/);
-  if (!daysMatch) return null;
-  const days = parseInt(daysMatch[1], 10);
-  if (isNaN(days) || days <= 0) return null;
-
-  const f = (frequency || "").toLowerCase().trim();
-  let dailyDoses = 0;
-
-  if (/^(\d)(?:-|\+)(\d)(?:-|\+)(\d)(?:-|\+)(\d)$/.test(f)) {
-    const match = f.match(/^(\d)(?:-|\+)(\d)(?:-|\+)(\d)(?:-|\+)(\d)$/);
-    if (match) dailyDoses = parseInt(match[1]) + parseInt(match[2]) + parseInt(match[3]) + parseInt(match[4]);
-  } else if (/^(\d)(?:-|\+)(\d)(?:-|\+)(\d)$/.test(f)) {
-    const match = f.match(/^(\d)(?:-|\+)(\d)(?:-|\+)(\d)$/);
-    if (match) dailyDoses = parseInt(match[1]) + parseInt(match[2]) + parseInt(match[3]);
-  } else if (/^(\d)(?:-|\+)(\d)$/.test(f)) {
-    const match = f.match(/^(\d)(?:-|\+)(\d)$/);
-    if (match) dailyDoses = parseInt(match[1]) + parseInt(match[2]);
-  } else if (f.includes("qid") || f.includes("q.i.d")) {
-    dailyDoses = 4;
-  } else if (f.includes("tds") || f.includes("tid") || f.includes("t.i.d") || f.includes("thrice")) {
-    dailyDoses = 3;
-  } else if (f.includes("bd") || f.includes("bid") || f.includes("b.i.d") || f.includes("twice")) {
-    dailyDoses = 2;
-  } else if (f.includes("od") || f.includes("o.d") || f.includes("daily") || f.includes("once")) {
-    dailyDoses = 1;
-  }
-
-  if (dailyDoses > 0) {
-    return Math.ceil(dailyDoses * days);
-  }
-  return null;
-}
-
 export default function VisitMedicineBillingPage() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "admin";
@@ -177,8 +147,19 @@ export default function VisitMedicineBillingPage() {
   const [billOffer, setBillOffer] = useState(0);
   const [paymentMethodId, setPaymentMethodId] = useState("");
   const [generatedByName, setGeneratedByName] = useState("");
+  const frequenciesRef = useRef<FrequencyOption[]>([]);
 
-  const buildBillItem = (
+  const getSuggestedQuantity = useCallback(
+    (frequency: string, duration: string) =>
+      calculateSuggestedTabletQuantity(frequency, duration, frequencies),
+    [frequencies]
+  );
+
+  useEffect(() => {
+    frequenciesRef.current = frequencies;
+  }, [frequencies]);
+
+  const buildBillItem = useCallback((
     medicineId: string | undefined,
     medicineName: string,
     batches: StockBatch[],
@@ -212,6 +193,18 @@ export default function VisitMedicineBillingPage() {
       };
     }
 
+    const suggestedQuantity = Math.max(
+      1,
+      Math.min(
+        calculateSuggestedTabletQuantity(
+          options?.frequency?.trim() || "",
+          options?.duration?.trim() || "",
+          frequenciesRef.current
+        ) ?? 1,
+        batch.currentStock
+      )
+    );
+
     return {
       id: `${medicineId ?? medicineName}-${batch._id}-${source}-${Math.random().toString(36).slice(2, 9)}`,
       medicineId,
@@ -221,17 +214,17 @@ export default function VisitMedicineBillingPage() {
       duration: options?.duration?.trim() || "",
       batchNo: batch.batchNo,
       expiryDate: batch.expiryDate,
-      quantity: 1,
+      quantity: suggestedQuantity,
       mrp: batch.mrp,
       sellingPrice: batch.sellingPrice,
       lineOffer: 0,
-      totalPrice: batch.sellingPrice,
+      totalPrice: batch.sellingPrice * suggestedQuantity,
       currentStock: batch.currentStock,
       stockStatus: "in_stock",
       availableBatches,
       source,
     };
-  };
+  }, []);
 
   const hydrateStoredBillItems = useCallback(async (storedBill: StoredMedicineBill) => {
     const rows = await Promise.all(
@@ -291,7 +284,7 @@ export default function VisitMedicineBillingPage() {
     const pm = storedBill.paymentMethod;
     setPaymentMethodId(pm?._id ? String(pm._id) : "");
     setGeneratedByName(storedBill.generatedByName?.trim() || "");
-  }, []);
+  }, [buildBillItem]);
 
   useEffect(() => {
     if (!visitId) return;
@@ -304,7 +297,17 @@ export default function VisitMedicineBillingPage() {
     ])
       .then(async ([visitData, medicineList, freqList]) => {
         setMedicineOptions(Array.isArray(medicineList) ? medicineList : []);
-        setFrequencies(Array.isArray(freqList) ? freqList.map((f: { name: string }) => ({ value: f.name, label: f.name })) : []);
+        setFrequencies(
+          Array.isArray(freqList)
+            ? freqList.map((f: { _id?: string; name: string; dosesPerDay?: number | null }) => ({
+                _id: f._id,
+                name: f.name,
+                dosesPerDay: f.dosesPerDay ?? null,
+                value: f.name,
+                label: f.name,
+              }))
+            : []
+        );
         if (!visitData?._id || !visitData?.patient?._id) {
           throw new Error("Visit not found");
         }
@@ -368,7 +371,7 @@ export default function VisitMedicineBillingPage() {
         toast.error(e instanceof Error ? e.message : "Failed to load visit");
       })
       .finally(() => setLoading(false));
-  }, [hydrateStoredBillItems, visitId]);
+  }, [buildBillItem, hydrateStoredBillItems, visitId]);
 
   const updateItemQty = (idx: number, qty: number) => {
     const item = items[idx];
@@ -455,7 +458,7 @@ export default function VisitMedicineBillingPage() {
     setItems((prev) => prev.map((row, itemIndex) => {
       if (itemIndex !== idx) return row;
       const nextRow = { ...row, frequency: value };
-      const suggested = calculateSuggestedQuantity(value, nextRow.duration);
+      const suggested = getSuggestedQuantity(value, nextRow.duration);
       if (suggested !== null && nextRow.stockStatus === "in_stock") {
         const qty = Math.min(suggested, nextRow.currentStock);
         nextRow.quantity = Math.max(1, qty);
@@ -469,7 +472,7 @@ export default function VisitMedicineBillingPage() {
     setItems((prev) => prev.map((row, itemIndex) => {
       if (itemIndex !== idx) return row;
       const nextRow = { ...row, duration: value };
-      const suggested = calculateSuggestedQuantity(nextRow.frequency, value);
+      const suggested = getSuggestedQuantity(nextRow.frequency, value);
       if (suggested !== null && nextRow.stockStatus === "in_stock") {
         const qty = Math.min(suggested, nextRow.currentStock);
         nextRow.quantity = Math.max(1, qty);

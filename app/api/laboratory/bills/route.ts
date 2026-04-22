@@ -19,6 +19,13 @@ import { resolvePaymentMethodId } from "@/lib/payment-method";
 import { sendPushNotificationToLaboratory } from "@/lib/push";
 import { clampBillOffer, clampLineOffer, grandTotalAfterBillOffer, lineNetAfterOffer } from "@/lib/bill-offers";
 
+type LabBillResponse = {
+  _id: unknown;
+  patient?: unknown;
+  visit?: unknown;
+  items?: unknown[];
+};
+
 const postBodySchema = z.object({
   visitId: z.string().min(1).optional(),
   patientId: z.string().min(1).optional(),
@@ -193,9 +200,9 @@ export const POST = withRouteLog("laboratory.bills.POST", async (req: NextReques
     }
 
     let hadExistingBill = false;
-    let labBill = null;
+    let labBill: LabBillResponse | null = null;
     if (visitRef) {
-      hadExistingBill = !!(await LabBill.exists({ visit: visitRef }));
+      hadExistingBill = Boolean(await LabBill.exists({ visit: visitRef }));
 
       await syncLabBillForVisitItems({
         patientId,
@@ -235,7 +242,7 @@ export const POST = withRouteLog("laboratory.bills.POST", async (req: NextReques
           return NextResponse.json({ message: "Invalid bill id" }, { status: 400 });
         }
         targetBillFilter = { ...labOnlyBaseFilter, _id: billId };
-        hadExistingBill = !!(await LabBill.exists(targetBillFilter));
+        hadExistingBill = Boolean(await LabBill.exists(targetBillFilter));
         if (!hadExistingBill) {
           return NextResponse.json({ message: "Lab bill not found" }, { status: 404 });
         }

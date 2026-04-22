@@ -26,6 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 type Frequency = {
   _id: string;
   name: string;
+  dosesPerDay?: number | null;
   isActive: boolean;
 };
 
@@ -35,6 +36,7 @@ export default function MedicineFrequenciesPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Frequency | null>(null);
   const [formName, setFormName] = useState("");
+  const [formDosesPerDay, setFormDosesPerDay] = useState("");
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -50,12 +52,18 @@ export default function MedicineFrequenciesPage() {
   const openAdd = () => {
     setEditing(null);
     setFormName("");
+    setFormDosesPerDay("");
     setOpen(true);
   };
 
   const openEdit = (frequency: Frequency) => {
     setEditing(frequency);
     setFormName(frequency.name);
+    setFormDosesPerDay(
+      frequency.dosesPerDay !== undefined && frequency.dosesPerDay !== null
+        ? String(frequency.dosesPerDay)
+        : ""
+    );
     setOpen(true);
   };
 
@@ -70,7 +78,10 @@ export default function MedicineFrequenciesPage() {
       const res = await fetch(editing ? `/api/medicine-frequencies/${editing._id}` : "/api/medicine-frequencies", {
         method: editing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: formName.trim() }),
+        body: JSON.stringify({
+          name: formName.trim(),
+          dosesPerDay: formDosesPerDay.trim() ? Number(formDosesPerDay) : null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? "Failed");
@@ -120,6 +131,7 @@ export default function MedicineFrequenciesPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
+              <TableHead>Doses/Day</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
@@ -127,12 +139,13 @@ export default function MedicineFrequenciesPage() {
           <TableBody>
             {frequencies.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={3} className="text-center text-muted-foreground">No frequencies found.</TableCell>
+                <TableCell colSpan={4} className="text-center text-muted-foreground">No frequencies found.</TableCell>
               </TableRow>
             ) : (
               frequencies.map((frequency) => (
                 <TableRow key={frequency._id}>
                   <TableCell>{frequency.name}</TableCell>
+                  <TableCell>{frequency.dosesPerDay ?? "-"}</TableCell>
                   <TableCell>
                     <Badge variant={frequency.isActive ? "default" : "secondary"}>
                       {frequency.isActive ? "Active" : "Inactive"}
@@ -159,6 +172,20 @@ export default function MedicineFrequenciesPage() {
           <div className="grid gap-2">
             <Label>Name</Label>
             <Input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="e.g. 1-0-1 / After food" />
+          </div>
+          <div className="grid gap-2">
+            <Label>Doses Per Day</Label>
+            <Input
+              type="number"
+              min="0.01"
+              step="0.25"
+              value={formDosesPerDay}
+              onChange={(e) => setFormDosesPerDay(e.target.value)}
+              placeholder="e.g. 2 for BD, 3 for TDS"
+            />
+            <p className="text-xs text-muted-foreground">
+              Used to auto-calculate tablet quantity from frequency and duration.
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
