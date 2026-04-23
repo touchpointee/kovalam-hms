@@ -36,6 +36,8 @@ export function PrintLayout({
   const paperClass = `bill-paper-${selectedPageSize}-${selectedPaper}`;
   const printPaperSizeLabel = selectedPageSize.toUpperCase();
   const printPageCssSize = `${printPaperSizeLabel} ${selectedPaper}`;
+  const printPageMargin = selectedPageSize === "a5" ? { x: 6, y: 8 } : { x: 6, y: 8 };
+  const printPageMarginCss = `${printPageMargin.y}mm ${printPageMargin.x}mm`;
   const previewFrameDimensions =
     selectedPageSize === "a5"
       ? { width: "148mm", minHeight: "210mm", widthPx: 559, heightPx: 794 }
@@ -48,6 +50,8 @@ export function PrintLayout({
       : selectedPaper === "portrait"
         ? { width: "210mm", minHeight: "297mm", widthPx: 794, heightPx: 1123 }
         : { width: "297mm", minHeight: "210mm", widthPx: 1123, heightPx: 794 };
+  const printContentWidth = `calc(${previewContentDimensions.width} - ${printPageMargin.x * 2}mm)`;
+  const printContentMinHeight = `calc(${previewContentDimensions.minHeight} - ${printPageMargin.y * 2}mm)`;
   const previewContentFitScale =
     selectedPaper === "landscape"
       ? Math.min(
@@ -472,7 +476,7 @@ export function PrintLayout({
         @media print {
           @page {
             size: ${printPageCssSize};
-            margin: 0;
+            margin: ${printPageMarginCss};
           }
 
           .bill-print-root .bill-preview-shell {
@@ -504,18 +508,20 @@ export function PrintLayout({
           }
 
           .bill-print-root #report-content {
-            width: ${previewContentDimensions.width} !important;
-            min-height: ${previewContentDimensions.minHeight} !important;
+            page: auto !important;
+            width: ${printContentWidth} !important;
+            min-height: ${printContentMinHeight} !important;
+            height: auto !important;
             max-width: none !important;
             margin: 0 auto !important;
-            padding-top: 2mm !important;
-            padding-bottom: 2mm !important;
+            padding-top: 3mm !important;
+            padding-bottom: 3mm !important;
             padding-left: 0 !important;
             padding-right: 0 !important;
             display: flex !important;
             flex-direction: column !important;
             box-sizing: border-box !important;
-            overflow: hidden !important;
+            overflow: visible !important;
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
