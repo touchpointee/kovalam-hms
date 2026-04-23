@@ -8,7 +8,7 @@ import toast from "react-hot-toast";
 import { Trash2 } from "lucide-react";
 import { rupeesInWords } from "@/lib/rupees-in-words";
 import { formatCurrency, formatPaymentMethodLabel } from "@/lib/utils";
-import { BillSignature, PrintLayout } from "@/components/PrintLayout";
+import { BillSectionHeading, BillSignature, PrintLayout } from "@/components/PrintLayout";
 import { getBillingStaffDisplayName } from "@/components/BillingStaffSelect";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -925,7 +925,7 @@ export default function FrontdeskPatientDetailPage() {
                   consultantName={combinedBill.consultantName}
                   appointmentAt={combinedBill.primaryConsultationAt}
                 />
-
+                <BillSectionHeading label="Consultation Bill" />
                 <table className="w-full border-collapse border-2 border-slate-800 text-[15px]">
                   <thead>
                     <tr className="bg-slate-100 print:bg-slate-50">
@@ -975,7 +975,7 @@ export default function FrontdeskPatientDetailPage() {
                   consultantName={printVisit.doctor?.name}
                   appointmentAt={printVisit.visitDate}
                 />
-
+                <BillSectionHeading label="Consultation Bill" />
                 <table className="w-full border-collapse border-2 border-slate-800 text-[15px]">
                   <thead>
                     <tr className="bg-slate-100 print:bg-slate-50">

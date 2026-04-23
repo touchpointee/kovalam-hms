@@ -218,13 +218,23 @@
   }
 
   /* Bills */
-  @page bill-landscape {
+  @page bill-a4-landscape {
     size: A4 landscape;
     margin: 5mm;
   }
 
-  @page bill-portrait {
+  @page bill-a4-portrait {
     size: A4 portrait;
+    margin: 5mm;
+  }
+
+  @page bill-a5-landscape {
+    size: A5 landscape;
+    margin: 5mm;
+  }
+
+  @page bill-a5-portrait {
+    size: A5 portrait;
     margin: 5mm;
   }
 
@@ -300,6 +310,21 @@
     max-width: 100%;
     padding: 0;
     margin: 0;
+  }
+
+  .preview-scale-inner {
+    transform: none !important;
+  }
+
+  .preview-page-content,
+  .preview-page-content-inner {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    height: auto !important;
+    transform: none !important;
   }
 
   table {
@@ -391,12 +416,20 @@
     page-break-inside: avoid !important;
   }
 
-  #report-content.bill-paper-landscape {
-    page: bill-landscape;
+  #report-content.bill-paper-a4-landscape {
+    page: bill-a4-landscape;
   }
 
-  #report-content.bill-paper-portrait {
-    page: bill-portrait;
+  #report-content.bill-paper-a4-portrait {
+    page: bill-a4-portrait;
+  }
+
+  #report-content.bill-paper-a5-landscape {
+    page: bill-a5-landscape;
+  }
+
+  #report-content.bill-paper-a5-portrait {
+    page: bill-a5-portrait;
   }
 
   #report-content table,

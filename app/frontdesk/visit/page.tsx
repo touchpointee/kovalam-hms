@@ -10,7 +10,7 @@ import { rupeesInWords } from "@/lib/rupees-in-words";
 import { formatCurrency, formatPaymentMethodLabel } from "@/lib/utils";
 import { PaymentMethodSelect } from "@/components/PaymentMethodSelect";
 import { BillingStaffSelect, getBillingStaffDisplayName } from "@/components/BillingStaffSelect";
-import { BillSignature, PrintLayout } from "@/components/PrintLayout";
+import { BillSectionHeading, BillSignature, PrintLayout } from "@/components/PrintLayout";
 import { SearchableCombobox } from "@/components/SearchableCombobox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -995,7 +995,7 @@ export default function VisitPage() {
                   consultantName={combinedBill.consultantName}
                   appointmentAt={combinedBill.primaryConsultationAt}
                 />
-
+                <BillSectionHeading label="Consultation Bill" />
                 <table className="w-full border-collapse border-2 border-slate-800 text-[15px]">
                   <thead>
                     <tr className="bg-slate-100 print:bg-slate-50">
@@ -1042,7 +1042,7 @@ export default function VisitPage() {
                 ) : (
                   <p className="text-sm text-amber-800">Patient details unavailable for this receipt.</p>
                 )}
-
+                <BillSectionHeading label="Consultation Bill" />
                 <table className="w-full border-collapse border-2 border-slate-800 text-[15px]">
                   <thead>
                     <tr className="bg-slate-100 print:bg-slate-50">

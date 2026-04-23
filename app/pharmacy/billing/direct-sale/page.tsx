@@ -8,7 +8,7 @@ import toast from "react-hot-toast";
 import { formatCurrency, formatPaymentMethodLabel } from "@/lib/utils";
 import { PaymentMethodSelect } from "@/components/PaymentMethodSelect";
 import { grandTotalAfterBillOffer, lineNetAfterOffer } from "@/lib/bill-offers";
-import { BillSignature, PrintLayout } from "@/components/PrintLayout";
+import { BillSectionHeading, BillSignature, PrintLayout } from "@/components/PrintLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -325,7 +325,7 @@ export default function DirectSalePage() {
               <div className="grid grid-cols-[130px_1fr]"><span>Type</span><span>: Direct Purchase</span></div>
             </div>
           </div>
-
+          <BillSectionHeading label="Pharmacy Bill" />
           <table className="w-full border-collapse text-[15px]">
             <thead>
               <tr>

@@ -6,7 +6,7 @@ import { useParams, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
-import { BillSignature, PrintLayout } from "@/components/PrintLayout";
+import { BillSectionHeading, BillSignature, PrintLayout } from "@/components/PrintLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -355,6 +355,7 @@ export default function FrontdeskVisitProcedureBillingPage() {
               </div>
             </div>
           </div>
+          <BillSectionHeading label="Procedure Bill" />
           <table className="w-full border-collapse text-[15px]">
             <thead>
               <tr>

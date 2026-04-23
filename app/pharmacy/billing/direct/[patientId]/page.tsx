@@ -12,7 +12,7 @@ import {
   grandTotalAfterBillOffer,
   lineNetAfterOffer,
 } from "@/lib/bill-offers";
-import { BillSignature, PrintLayout } from "@/components/PrintLayout";
+import { BillSectionHeading, BillSignature, PrintLayout } from "@/components/PrintLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -576,6 +576,7 @@ export default function DirectMedicineBillingPage() {
               </div>
             </div>
           </div>
+          <BillSectionHeading label="Pharmacy Bill" />
           <table className="w-full border-collapse text-[15px]">
             <thead>
               <tr>
