@@ -34,6 +34,8 @@ export function PrintLayout({
   }, [paper]);
 
   const paperClass = `bill-paper-${selectedPageSize}-${selectedPaper}`;
+  const printPaperSizeLabel = selectedPageSize.toUpperCase();
+  const printPageCssSize = `${printPaperSizeLabel} ${selectedPaper}`;
   const previewFrameDimensions =
     selectedPageSize === "a5"
       ? { width: "148mm", minHeight: "210mm", widthPx: 559, heightPx: 794 }
@@ -156,10 +158,10 @@ export function PrintLayout({
 
       <div
         ref={previewShellRef}
-        className="flex min-h-[70vh] w-full items-start justify-center overflow-auto rounded-xl bg-slate-100/40 p-3"
+        className="bill-preview-shell flex min-h-[70vh] w-full items-start justify-center overflow-auto rounded-xl bg-slate-100/40 p-3"
       >
         <div
-          className="mx-auto"
+          className="bill-preview-stage mx-auto"
           style={{
             width: `${previewFrameDimensions.widthPx * previewScale}px`,
             height: `${previewFrameDimensions.heightPx * previewScale}px`,
@@ -174,7 +176,7 @@ export function PrintLayout({
             }}
           >
             <div
-              className="relative overflow-hidden border border-slate-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.12)]"
+              className="bill-preview-frame relative overflow-hidden border border-slate-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.12)]"
               style={{ width: previewFrameDimensions.width, minHeight: previewFrameDimensions.minHeight }}
             >
               <div
@@ -465,6 +467,91 @@ export function PrintLayout({
 
         #report-content.bill-size-a5 .min-w-\\[220px\\] {
           min-width: 120px !important;
+        }
+
+        @media print {
+          @page {
+            size: ${printPageCssSize};
+            margin: 0;
+          }
+
+          .bill-print-root .bill-preview-shell {
+            display: block !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            background: transparent !important;
+            padding: 0 !important;
+            border-radius: 0 !important;
+          }
+
+          .bill-print-root .bill-preview-stage,
+          .bill-print-root .preview-scale-inner,
+          .bill-print-root .bill-preview-frame,
+          .bill-print-root .preview-page-content,
+          .bill-print-root .preview-page-content-inner {
+            width: auto !important;
+            min-height: 0 !important;
+            height: auto !important;
+            max-width: none !important;
+            transform: none !important;
+            position: static !important;
+            left: auto !important;
+            top: auto !important;
+            overflow: visible !important;
+            border: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
+          }
+
+          .bill-print-root #report-content {
+            width: ${previewContentDimensions.width} !important;
+            min-height: ${previewContentDimensions.minHeight} !important;
+            max-width: none !important;
+            margin: 0 auto !important;
+            padding-top: 2mm !important;
+            padding-bottom: 2mm !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            box-sizing: border-box !important;
+            overflow: hidden !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+
+          .bill-print-root .print-letterhead-header,
+          .bill-print-root .print-letterhead-body,
+          .bill-print-root .print-letterhead-footer {
+            padding-left: 8mm !important;
+            padding-right: 8mm !important;
+            max-width: none !important;
+          }
+
+          .bill-print-root .print-letterhead-header {
+            padding-top: 0 !important;
+          }
+
+          .bill-print-root .print-letterhead-body {
+            margin-top: 10px !important;
+            margin-bottom: 0 !important;
+            flex: 1 0 auto !important;
+          }
+
+          .bill-print-root .print-letterhead-footer {
+            position: static !important;
+            inset: auto !important;
+            margin-top: auto !important;
+            padding-bottom: 0 !important;
+          }
+
+          .bill-print-root .print-letterhead-footer-inner,
+          .bill-print-root .print-letterhead-header,
+          .bill-print-root .print-letterhead-bluebar,
+          .bill-print-root .print-letterhead-redbar {
+            width: 100% !important;
+            max-width: none !important;
+          }
         }
       `}</style>
     </div>
