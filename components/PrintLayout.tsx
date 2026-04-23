@@ -225,7 +225,7 @@ export function PrintLayout({
                           </p>
                           <div className="bill-hospital-meta mt-1 text-[11px] leading-tight text-slate-800 sm:text-[13px]">
                             <p>(TC 58/2993/1, PARAVILA, PACHALLOOR P.O, THIRUVANANTHAPURAM)</p>
-                            <p>PH: 0471-3170428, 8089056438</p>
+                            <p>PH: 0471-3170428, +91 8089056438, +91 94464 95649</p>
                           </div>
                         </div>
 
@@ -343,6 +343,30 @@ export function PrintLayout({
           line-height: 1.15 !important;
         }
 
+        #report-content.bill-paper-a4-landscape [class*="grid-cols-2"][class*="gap-8"][class*="border-y"][class*="text-[15px]"] {
+          gap: 18px !important;
+          padding-top: 12px !important;
+          padding-bottom: 12px !important;
+          font-size: 11px !important;
+          line-height: 1.2 !important;
+        }
+
+        #report-content.bill-paper-a4-landscape [class*="grid-cols-2"][class*="gap-8"][class*="border-y"][class*="text-[15px]"] > .space-y-2 > * + * {
+          margin-top: 0.45rem !important;
+        }
+
+        #report-content.bill-paper-a4-landscape [class*="grid-cols-[120px_1fr]"] {
+          grid-template-columns: 98px minmax(0, 1fr) !important;
+          column-gap: 3px !important;
+          line-height: 1.2 !important;
+        }
+
+        #report-content.bill-paper-a4-landscape [class*="grid-cols-[150px_1fr]"] {
+          grid-template-columns: 120px minmax(0, 1fr) !important;
+          column-gap: 3px !important;
+          line-height: 1.2 !important;
+        }
+
         #report-content.bill-paper-a4-landscape .bill-signature,
         #report-content.bill-paper-a5-landscape .bill-signature {
           margin-top: 10px !important;
@@ -397,6 +421,56 @@ export function PrintLayout({
           height: 42px !important;
         }
 
+        #report-content.bill-size-a5 [class*="grid-cols-2"][class*="gap-8"][class*="border-y"][class*="text-[15px]"] {
+          grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) !important;
+          gap: 12px !important;
+          padding-top: 10px !important;
+          padding-bottom: 10px !important;
+          font-size: 9px !important;
+          line-height: 1.15 !important;
+        }
+
+        #report-content.bill-size-a5 [class*="grid-cols-2"][class*="gap-8"][class*="border-y"][class*="text-[15px]"] > .space-y-2 > * + * {
+          margin-top: 0.35rem !important;
+        }
+
+        #report-content.bill-size-a5 [class*="grid-cols-[120px_1fr]"] {
+          grid-template-columns: 84px minmax(0, 1fr) !important;
+          column-gap: 2px !important;
+          line-height: 1.15 !important;
+        }
+
+        #report-content.bill-size-a5 [class*="grid-cols-[150px_1fr]"] {
+          grid-template-columns: 104px minmax(0, 1fr) !important;
+          column-gap: 2px !important;
+          line-height: 1.15 !important;
+        }
+
+        #report-content.bill-paper-a5-landscape [class*="grid-cols-2"][class*="gap-8"][class*="border-y"][class*="text-[15px]"] {
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+          gap: 16px !important;
+          padding-top: 10px !important;
+          padding-bottom: 10px !important;
+          font-size: 10px !important;
+          line-height: 1.2 !important;
+        }
+
+        #report-content.bill-paper-a5-landscape [class*="grid-cols-2"][class*="gap-8"][class*="border-y"][class*="text-[15px]"] > .space-y-2 > * + * {
+          margin-top: 0.4rem !important;
+        }
+
+        #report-content.bill-paper-a5-landscape [class*="grid-cols-[120px_1fr]"] {
+          grid-template-columns: 92px minmax(0, 1fr) !important;
+          column-gap: 3px !important;
+          line-height: 1.2 !important;
+        }
+
+        #report-content.bill-paper-a5-landscape [class*="grid-cols-[150px_1fr]"] {
+          grid-template-columns: 114px minmax(0, 1fr) !important;
+          column-gap: 3px !important;
+          line-height: 1.2 !important;
+        }
+
         #report-content.bill-size-a5 .print-letterhead-bluebar {
           height: 14px !important;
           font-size: 8px !important;
@@ -416,9 +490,12 @@ export function PrintLayout({
         }
 
         #report-content.bill-size-a5 .bill-section-heading {
-          margin-top: -4px !important;
-          margin-bottom: -4px !important;
+          margin-top: -2px !important;
+          margin-bottom: -2px !important;
+          padding-left: 2px !important;
+          padding-right: 2px !important;
           font-size: 8px !important;
+          line-height: 1 !important;
           letter-spacing: 0.04em !important;
         }
 
@@ -443,6 +520,11 @@ export function PrintLayout({
 
         #report-content.bill-paper-a5-landscape .bill-signature {
           min-height: 84px !important;
+          margin-bottom: 12px !important;
+        }
+
+        #report-content.bill-paper-a5-landscape .print-letterhead-body {
+          margin-bottom: 8px !important;
         }
 
         #report-content.bill-size-a5 table,
@@ -467,6 +549,19 @@ export function PrintLayout({
 
         #report-content.bill-size-a5 .w-\\[320px\\] {
           width: 220px !important;
+        }
+
+        #report-content.bill-size-a5 .ml-auto.grid.w-\\[340px\\],
+        #report-content.bill-size-a5 .ml-auto.grid.w-\\[320px\\] {
+          font-size: 9px !important;
+          line-height: 1.15 !important;
+          row-gap: 0 !important;
+        }
+
+        #report-content.bill-size-a5 .ml-auto.grid.w-\\[340px\\] > div,
+        #report-content.bill-size-a5 .ml-auto.grid.w-\\[320px\\] > div {
+          padding-top: 2px !important;
+          padding-bottom: 2px !important;
         }
 
         #report-content.bill-size-a5 .min-w-\\[220px\\] {
@@ -544,6 +639,14 @@ export function PrintLayout({
             flex: 1 0 auto !important;
           }
 
+          .bill-print-root #report-content.bill-paper-a5-landscape .print-letterhead-body {
+            margin-bottom: 8px !important;
+          }
+
+          .bill-print-root #report-content.bill-paper-a5-landscape .bill-signature {
+            margin-bottom: 12px !important;
+          }
+
           .bill-print-root .print-letterhead-footer {
             position: static !important;
             inset: auto !important;
@@ -596,8 +699,10 @@ export function BillSectionHeading({
   label: string;
 }) {
   return (
-    <div className="bill-section-heading -my-2 py-0 text-center text-[10px] leading-none font-bold uppercase tracking-[0.06em] text-slate-700">
-      {label}
+    <div className="flex w-full justify-center my-[-2px]">
+      <div className="bill-section-heading relative z-10 inline-flex items-center justify-center bg-white px-1 py-0 text-center text-[10px] leading-[1] font-bold uppercase tracking-[0.06em] text-slate-700">
+        {label}
+      </div>
     </div>
   );
 }
