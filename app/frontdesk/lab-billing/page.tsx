@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +31,10 @@ type Visit = {
 };
 
 export default function FrontdeskLabBillingPage() {
+  const { data: session } = useSession();
+  const pathname = usePathname();
+  const isAdmin = session?.user?.role === "admin";
+  const labBillingBase = pathname.startsWith("/admin/") ? "/admin/lab-billing" : "/frontdesk/lab-billing";
   const [todayVisits, setTodayVisits] = useState<Visit[]>([]);
   const [labOnlyPatients, setLabOnlyPatients] = useState<LabPatient[]>([]);
   const [labOnlyBillsByPatient, setLabOnlyBillsByPatient] = useState<
@@ -168,11 +174,11 @@ export default function FrontdeskLabBillingPage() {
                         {visit.patient?._id ? (
                           <div className="flex flex-wrap gap-2">
                             <Button asChild size="sm" variant="outline">
-                              <Link href={`/frontdesk/lab-billing/${visit._id}`}>
+                              <Link href={`${labBillingBase}/${visit._id}`}>
                                 {hasLab ? "Open Bill" : "Bill This Visit"}
                               </Link>
                             </Button>
-                            {visit.labBill?._id ? (
+                            {isAdmin && visit.labBill?._id ? (
                               <Button
                                 size="sm"
                                 variant="destructive"
@@ -248,11 +254,11 @@ export default function FrontdeskLabBillingPage() {
                     <TableCell>
                       <div className="flex flex-wrap gap-2">
                         <Button asChild size="sm" variant="outline">
-                          <Link href={`/frontdesk/lab-billing/lab-only/${patient._id}`}>
+                          <Link href={`${labBillingBase}/lab-only/${patient._id}`}>
                             {hasBill ? "Open Bill" : "Create Lab Bill"}
                           </Link>
                         </Button>
-                        {bill?._id ? (
+                        {isAdmin && bill?._id ? (
                           <Button
                             size="sm"
                             variant="destructive"

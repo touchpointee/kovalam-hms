@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
@@ -28,8 +28,6 @@ import {
   grandTotalAfterBillOffer,
   lineNetAfterOffer,
 } from "@/lib/bill-offers";
-
-const visitListBackHref = "/frontdesk/lab-billing";
 
 type Patient = { _id: string; name: string; regNo: string; phone?: string; age?: number; address?: string };
 type Visit = {
@@ -105,6 +103,8 @@ export default function FrontdeskLabBillingVisitPage() {
   const isAdmin = session?.user?.role === "admin";
   const role = session?.user?.role;
   const canAdjustLabBill = isAdmin || role === "frontdesk" || role === "laboratory";
+  const pathname = usePathname();
+  const visitListBackHref = pathname.startsWith("/admin/") ? "/admin/lab-billing" : "/frontdesk/lab-billing";
   const params = useParams<{ visitId: string }>();
   const visitId = params?.visitId ?? "";
 
@@ -352,7 +352,7 @@ export default function FrontdeskLabBillingVisitPage() {
     return (
       <PrintLayout
         title="Lab Bill"
-        paper="landscape"
+        paper="portrait"
         actions={
           <div className="flex items-center gap-2">
             <Button variant="default" onClick={() => window.print()}>
@@ -366,7 +366,7 @@ export default function FrontdeskLabBillingVisitPage() {
                 Edit Bill
               </Button>
             )}
-            {canAdjustLabBill && (
+            {isAdmin && (
               <Button variant="destructive" onClick={deleteBill} disabled={submitting}>
                 {submitting ? "Deleting..." : "Delete Bill"}
               </Button>
@@ -664,7 +664,7 @@ export default function FrontdeskLabBillingVisitPage() {
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                     <p className="text-sm font-semibold">Net total: {formatCurrency(grandTotal)}</p>
                     <div className="flex flex-wrap items-center gap-2">
-                      {canAdjustLabBill && bill?._id ? (
+                      {isAdmin && bill?._id ? (
                         <Button type="button" variant="destructive" onClick={deleteBill} disabled={submitting}>
                           {submitting ? "Deleting..." : "Delete Bill"}
                         </Button>

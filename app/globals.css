@@ -80,81 +80,107 @@
   .op-page {
     @apply space-y-6;
   }
+
   .op-title {
     @apply text-3xl font-semibold tracking-tight text-slate-900;
   }
+
   .op-subtitle {
     @apply text-sm text-slate-500;
   }
+
   .op-panel {
     @apply rounded-2xl border border-blue-100 bg-white p-5 shadow-sm;
   }
+
   .op-highlight {
     @apply rounded-xl bg-gradient-to-r from-blue-900 to-blue-700 p-4 text-white shadow-sm;
   }
+
   .op-section-title {
     @apply text-sm font-semibold text-slate-700;
   }
+
   .op-field-label {
     @apply mb-1.5 block text-sm font-medium text-slate-700;
   }
+
   .op-input {
     @apply border-blue-200 bg-white;
   }
+
   .op-button-primary {
     @apply bg-blue-800 text-white hover:bg-blue-900;
   }
+
   .op-soft-card {
     @apply rounded-xl border border-blue-100 bg-blue-50/50 p-3;
   }
+
   .btn-primary {
     @apply bg-blue-800 text-white px-6 py-2.5 rounded-lg hover:bg-blue-900 transition-all font-medium shadow-sm hover:shadow-md;
   }
+
   .btn-secondary {
     @apply bg-blue-100 text-blue-800 px-6 py-2.5 rounded-lg hover:bg-blue-200 transition-all font-medium border border-blue-200;
   }
+
   .btn-success {
     @apply bg-blue-800 text-white px-6 py-2.5 rounded-lg hover:bg-blue-900 transition-all font-medium shadow-sm hover:shadow-md;
   }
+
   .btn-danger {
     @apply bg-red-600 text-white px-6 py-2.5 rounded-lg hover:bg-red-700 transition-all font-medium shadow-sm hover:shadow-md;
   }
+
   .card {
     @apply bg-white rounded-xl shadow-sm border border-blue-100 p-6 hover:shadow-md transition-shadow;
   }
+
   .stat-card {
     @apply bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl shadow-sm border border-blue-200 p-6 hover:shadow-lg transition-all;
   }
+
   .input-field {
     @apply w-full px-4 py-2.5 border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white;
   }
+
   .table-container {
     @apply overflow-x-auto rounded-xl border border-blue-100 shadow-sm;
   }
+
   .badge {
     @apply px-3 py-1 rounded-full text-xs font-semibold;
   }
+
   .badge-success {
     @apply badge bg-blue-100 text-blue-800 border border-blue-200;
   }
+
   .badge-danger {
     @apply badge bg-red-100 text-red-800 border border-red-200;
   }
+
   .badge-warning {
     @apply badge bg-amber-100 text-amber-800 border border-amber-200;
   }
+
   .badge-info {
     @apply badge bg-blue-100 text-blue-800 border border-blue-200;
   }
+
   .badge-secondary {
     @apply badge bg-blue-50 text-blue-700 border border-blue-100;
   }
+
   .status-pending {
     @apply bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-xs font-semibold border border-amber-200;
   }
+
   .status-completed {
     @apply bg-blue-800 text-white px-3 py-1 rounded-full text-xs font-semibold;
   }
+
   .status-cancelled {
     @apply bg-red-200 text-red-900 px-3 py-1 rounded-full text-xs font-semibold border border-red-300;
   }
@@ -198,6 +224,7 @@
     overflow: visible !important;
     background: #fff !important;
   }
+
   .dashboard-shell-root main .dashboard-content {
     max-width: none !important;
     margin: 0 !important;
@@ -256,8 +283,8 @@
 
   /* Invisible shell still reserves min-h-screen → blank print pages before/after the bill */
   .dashboard-shell-root,
-  .dashboard-shell-root > .flex,
-  .dashboard-shell-root > .flex.min-h-screen,
+  .dashboard-shell-root>.flex,
+  .dashboard-shell-root>.flex.min-h-screen,
   .dashboard-shell-root .flex.min-h-screen,
   .dashboard-shell-root .flex.min-w-0.flex-1,
   .dashboard-shell-root main,
@@ -274,7 +301,7 @@
   }
 
   /* Sidebar gutter (md:pl-64) still applies in print → huge left offset & page breaks */
-  .dashboard-shell-root > .flex > .flex.min-w-0.flex-1.flex-col,
+  .dashboard-shell-root>.flex>.flex.min-w-0.flex-1.flex-col,
   .dashboard-shell-root .flex.min-w-0.flex-1.flex-col {
     padding-left: 0 !important;
     padding-right: 0 !important;
@@ -283,7 +310,7 @@
     overflow: visible !important;
   }
 
-  .dashboard-shell-root > .flex.min-h-screen {
+  .dashboard-shell-root>.flex.min-h-screen {
     display: block !important;
     min-height: 0 !important;
     height: auto !important;
@@ -341,6 +368,7 @@
   body * {
     visibility: hidden;
   }
+
   .print-container,
   #report-content,
   #report-content * {
@@ -395,6 +423,7 @@
     break-inside: avoid;
     page-break-after: auto;
   }
+
   #report-content {
     position: relative;
     left: auto;
@@ -453,6 +482,7 @@
     padding-right: 8mm !important;
     max-width: none !important;
   }
+
   .print-letterhead-footer {
     position: static !important;
     bottom: auto;
@@ -467,6 +497,7 @@
     padding-right: 8mm !important;
     max-width: none !important;
   }
+
   .print-letterhead-body {
     margin-top: 10px !important;
     margin-bottom: 0 !important;
@@ -474,28 +505,34 @@
     padding-left: 8mm !important;
     padding-right: 8mm !important;
   }
+
   .print-letterhead-footer-inner,
   .print-letterhead-header {
     width: 100% !important;
   }
+
   .print-letterhead-bluebar,
   .print-letterhead-redbar {
     max-width: none !important;
     width: 100% !important;
   }
+
   .card {
     box-shadow: none !important;
     border: 1px solid #e5e7eb !important;
     page-break-inside: avoid;
   }
+
   /* Global row avoid + short bills caused extra blank pages in Chromium print */
   tr {
     page-break-inside: auto !important;
     page-break-after: auto;
   }
+
   thead {
     display: table-header-group;
   }
+
   .bg-gradient-to-r,
   .bg-gradient-to-br,
   .bg-green-100,
@@ -508,6 +545,7 @@
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+
   .page-break {
     page-break-after: always;
   }

@@ -295,6 +295,9 @@ export default function AdminPatientDetailPage() {
           <Button asChild variant="outline">
             <Link href="/admin/patients">Back</Link>
           </Button>
+          <Button asChild variant="secondary">
+            <Link href={`/admin/visit?patientId=${patient._id}&from=patient-detail`}>New OP Visit</Link>
+          </Button>
           <Button
             type="button"
             variant="outline"

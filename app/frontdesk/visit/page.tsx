@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format, subDays } from "date-fns";
 import toast from "react-hot-toast";
@@ -213,9 +213,11 @@ function buildCombinedBillFromStoredVisit(data: Visit): CombinedBill | null {
 
 export default function VisitPage() {
   const { data: session } = useSession();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const presetPatientId = searchParams.get("patientId");
   const fromPatientDetail = searchParams.get("from") === "patient-detail";
+  const consultationBase = pathname.startsWith("/admin/") ? "/admin/patients" : "/doctor/patients";
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
@@ -889,7 +891,7 @@ export default function VisitPage() {
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button asChild size="sm" variant="outline">
                       <Link
-                        href={`/doctor/patients/${consultationPatientId}/consultation?visitId=${createdVisit._id}`}
+                        href={`${consultationBase}/${consultationPatientId}/consultation?visitId=${createdVisit._id}`}
                       >
                         Continue to Consultation
                       </Link>
@@ -920,7 +922,7 @@ export default function VisitPage() {
                     <li key={v._id}>
                       <div className="rounded-md bg-emerald-50/50 px-2 py-1.5 text-xs">
                         <Link
-                          href={`/doctor/patients/${(v.patient as Patient)._id}/consultation?visitId=${v._id}`}
+                          href={`${consultationBase}/${(v.patient as Patient)._id}/consultation?visitId=${v._id}`}
                           className="block hover:bg-emerald-100/70"
                         >
                           <p className="font-medium text-slate-700">{(v.patient as Patient | undefined)?.name ?? "-"}</p>
@@ -964,7 +966,7 @@ export default function VisitPage() {
         <div id="consultation-bill-preview">
           <PrintLayout
             title={combinedBill ? "OP consultation receipt" : "Consultation Bill"}
-            paper="landscape"
+            paper="portrait"
             actions={
               <div className="flex items-center gap-2">
                 <Button variant="default" onClick={() => window.print()}>

@@ -60,20 +60,25 @@ export default function AdminTodayVisitsPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">OP visit</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Choose a date to list OP visits for that day. Open consultation, procedure billing, or pharmacy billing for any visit. Bills are read-only for staff after generation; admins can edit from those pages.
+            Choose a date to list OP visits for that day. Open consultation, procedure, pharmacy, or lab billing for any visit. Bills are read-only for staff after generation; admins can edit from those pages.
           </p>
         </div>
-        <label className="relative inline-flex cursor-pointer items-center gap-2 rounded-md border border-transparent bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground hover:bg-secondary/80">
-          <CalendarDays className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-          <span className="tabular-nums">{selectedLabel}</span>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="absolute inset-0 cursor-pointer opacity-0"
-            aria-label="Select date for OP visits"
-          />
-        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild>
+            <Link href="/admin/visit">New OP Visit</Link>
+          </Button>
+          <label className="relative inline-flex cursor-pointer items-center gap-2 rounded-md border border-transparent bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground hover:bg-secondary/80">
+            <CalendarDays className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+            <span className="tabular-nums">{selectedLabel}</span>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="absolute inset-0 cursor-pointer opacity-0"
+              aria-label="Select date for OP visits"
+            />
+          </label>
+        </div>
       </div>
 
       <Card className="border shadow-sm">
@@ -155,6 +160,9 @@ export default function AdminTodayVisitsPage() {
                               </Button>
                               <Button asChild size="sm" variant="outline">
                                 <Link href={`/admin/pharmacy/billing/${v._id}`}>Pharmacy</Link>
+                              </Button>
+                              <Button asChild size="sm" variant="outline">
+                                <Link href={`/admin/lab-billing/${v._id}`}>Lab</Link>
                               </Button>
                               <Button asChild size="sm" variant="secondary">
                                 <Link href={`/admin/patients/${pid}`}>Patient</Link>

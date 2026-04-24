@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
 import { Trash2 } from "lucide-react";
@@ -273,6 +274,8 @@ function buildCombinedBillFromStoredVisit(data: PrintableVisit): CombinedBill | 
 }
 
 export default function FrontdeskPatientDetailPage() {
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "admin";
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
@@ -869,17 +872,19 @@ export default function FrontdeskPatientDetailPage() {
                             </Link>
                           </Button>
                         ) : null}
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                          disabled={deletingVisitId === v._id}
-                          onClick={() => void deleteVisit(v._id)}
-                        >
-                          <Trash2 className="mr-1 h-3.5 w-3.5" aria-hidden />
-                          {deletingVisitId === v._id ? "Deleting…" : "Delete"}
-                        </Button>
+                        {isAdmin && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                            disabled={deletingVisitId === v._id}
+                            onClick={() => void deleteVisit(v._id)}
+                          >
+                            <Trash2 className="mr-1 h-3.5 w-3.5" aria-hidden />
+                            {deletingVisitId === v._id ? "Deleting…" : "Delete"}
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -894,7 +899,7 @@ export default function FrontdeskPatientDetailPage() {
         <div id="consultation-bill-preview">
           <PrintLayout
             title={combinedBill ? "OP consultation receipt" : "Consultation Bill"}
-            paper="landscape"
+            paper="portrait"
             actions={
               <div className="flex items-center gap-2">
                 <Button variant="default" onClick={() => window.print()}>

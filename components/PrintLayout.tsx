@@ -17,7 +17,7 @@ export function PrintLayout({
   title,
   children,
   actions,
-  paper = "landscape",
+  paper = "portrait",
 }: {
   title: string;
   children: React.ReactNode;
@@ -205,8 +205,12 @@ export function PrintLayout({
                 >
                   <div
                     id="report-content"
-                    className={`bill-content relative mx-auto w-full overflow-hidden bg-white px-2 pb-16 pt-2 ${paperClass} bill-size-${selectedPageSize}`}
-                    style={{ width: previewContentDimensions.width, minHeight: previewContentDimensions.minHeight }}
+                    className={`bill-content relative mx-auto flex w-full flex-col overflow-hidden bg-white px-2 py-2 ${paperClass} bill-size-${selectedPageSize}`}
+                    style={{
+                      width: previewContentDimensions.width,
+                      minHeight: previewContentDimensions.minHeight,
+                      height: previewContentDimensions.minHeight,
+                    }}
                   >
                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                       <Image src="/hospital-logo.png" alt="" width={180} height={180} className="opacity-[0.08] object-contain" />
@@ -235,9 +239,11 @@ export function PrintLayout({
                       </div>
                     </div>
 
-                    <div className="print-letterhead-body relative z-10 mx-auto mt-3 w-full max-w-full">{children}</div>
+                    <div className="print-letterhead-body relative z-10 mx-auto mt-3 flex min-h-0 w-full max-w-full flex-1 flex-col overflow-y-auto">
+                      {children}
+                    </div>
 
-                    <div className="print-letterhead-footer absolute inset-x-2 bottom-1 z-10 pb-0">
+                    <div className="print-letterhead-footer relative z-10 mt-3 pb-0">
                       <div className="print-letterhead-footer-inner mx-auto max-w-full text-center">
                         <div className="print-letterhead-bluebar mx-auto flex h-[18px] max-w-full items-center justify-center bg-[#263f86] px-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white sm:text-[13px] sm:tracking-[0.35em]">
                           Your Health Our Priority
@@ -303,8 +309,9 @@ export function PrintLayout({
           font-size: 11px;
         }
 
-        #report-content.bill-paper-a4-portrait .bill-signature {
-          min-height: 380px !important;
+        #report-content.bill-content .bill-signature.bill-signature-compact,
+        #report-content.bill-paper-a4-portrait .bill-signature.bill-signature-compact {
+          min-height: 120px !important;
         }
 
         #report-content.bill-paper-a4-landscape,
@@ -492,9 +499,9 @@ export function PrintLayout({
         #report-content.bill-size-a5 .bill-section-heading {
           margin-top: -2px !important;
           margin-bottom: -2px !important;
-          padding-left: 2px !important;
-          padding-right: 2px !important;
-          font-size: 8px !important;
+          padding-left: 4px !important;
+          padding-right: 4px !important;
+          font-size: 11px !important;
           line-height: 1 !important;
           letter-spacing: 0.04em !important;
         }
@@ -508,6 +515,10 @@ export function PrintLayout({
         #report-content.bill-size-a5 .bill-signature > div {
           margin-top: 6px !important;
           gap: 12px !important;
+        }
+
+        #report-content.bill-size-a5 .bill-signature.bill-signature-compact {
+          min-height: 64px !important;
         }
 
         #report-content.bill-paper-a4-landscape .bill-signature {
@@ -613,12 +624,11 @@ export function PrintLayout({
             padding-bottom: 3mm !important;
             padding-left: 0 !important;
             padding-right: 0 !important;
-            display: flex !important;
-            flex-direction: column !important;
+            display: table !important;
             box-sizing: border-box !important;
             overflow: visible !important;
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
+            break-inside: auto !important;
+            page-break-inside: auto !important;
           }
 
           .bill-print-root .print-letterhead-header,
@@ -631,12 +641,16 @@ export function PrintLayout({
 
           .bill-print-root .print-letterhead-header {
             padding-top: 0 !important;
+            display: table-header-group !important;
           }
 
           .bill-print-root .print-letterhead-body {
             margin-top: 10px !important;
             margin-bottom: 0 !important;
-            flex: 1 0 auto !important;
+            display: table-row-group !important;
+            flex: initial !important;
+            min-height: 0 !important;
+            overflow: visible !important;
           }
 
           .bill-print-root #report-content.bill-paper-a5-landscape .print-letterhead-body {
@@ -650,7 +664,8 @@ export function PrintLayout({
           .bill-print-root .print-letterhead-footer {
             position: static !important;
             inset: auto !important;
-            margin-top: auto !important;
+            display: table-footer-group !important;
+            margin-top: 0 !important;
             padding-bottom: 0 !important;
           }
 
@@ -661,6 +676,16 @@ export function PrintLayout({
             width: 100% !important;
             max-width: none !important;
           }
+
+          .bill-print-root .bill-body-stack {
+            min-height: 0 !important;
+          }
+
+          .bill-print-root .bill-summary-block,
+          .bill-print-root .bill-signature {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
         }
       `}</style>
     </div>
@@ -670,14 +695,16 @@ export function PrintLayout({
 export function BillSignature({
   staffName,
   label = "Authorized Signatory",
+  className,
 }: {
   staffName?: string | null;
   label?: string;
+  className?: string;
 }) {
   const resolvedName = staffName?.trim() || "—";
 
   return (
-    <div className="bill-signature mt-8 flex min-h-[220px] flex-col justify-end text-[12px] text-slate-800">
+    <div className={cn("bill-signature mt-8 flex min-h-[220px] flex-col justify-end text-[12px] text-slate-800", className)}>
       <p className="font-semibold text-slate-900">{label}:</p>
       <div className="mt-2.5 flex items-end justify-between gap-8">
         <div className="min-w-0">
@@ -700,7 +727,7 @@ export function BillSectionHeading({
 }) {
   return (
     <div className="flex w-full justify-center my-[-2px]">
-      <div className="bill-section-heading relative z-10 inline-flex items-center justify-center bg-white px-1 py-0 text-center text-[10px] leading-[1] font-bold uppercase tracking-[0.06em] text-slate-700">
+      <div className="bill-section-heading relative z-10 inline-flex items-center justify-center bg-white px-2 py-0 text-center text-[16px] leading-[1] font-bold uppercase tracking-[0.08em] text-slate-800">
         {label}
       </div>
     </div>

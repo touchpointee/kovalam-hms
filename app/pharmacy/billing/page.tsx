@@ -32,8 +32,7 @@ type Visit = {
 export default function PharmacyBillingPage() {
   const { data: session } = useSession();
   const medicineBillingBase = useMedicineBillingBase();
-  const canDeleteBill =
-    session?.user?.role === "admin" || session?.user?.role === "pharmacy" || session?.user?.role === "frontdesk";
+  const canDeleteBill = session?.user?.role === "admin";
   const [todayVisits, setTodayVisits] = useState<Visit[]>([]);
   const [pharmacyOnlyPatients, setPharmacyOnlyPatients] = useState<Patient[]>([]);
   const [directBillsByPatient, setDirectBillsByPatient] = useState<

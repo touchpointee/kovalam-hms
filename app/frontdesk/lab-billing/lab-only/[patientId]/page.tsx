@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
@@ -25,8 +25,6 @@ import { formatCurrency, formatPaymentMethodLabel } from "@/lib/utils";
 import { PaymentMethodSelect } from "@/components/PaymentMethodSelect";
 import { BillingStaffSelect, getBillingStaffDisplayName } from "@/components/BillingStaffSelect";
 import { grandTotalAfterBillOffer, lineNetAfterOffer } from "@/lib/bill-offers";
-
-const fallbackBackHref = "/frontdesk/lab-register";
 
 type Patient = { _id: string; name: string; regNo: string; phone?: string; age?: number; address?: string; createdAt?: string };
 type LabBillItem = {
@@ -92,11 +90,13 @@ function itemsFromLabBill(bill: LabBill | null, catalog: CatalogTest[]): LabLine
 
 export default function FrontdeskLabBillingLabOnlyPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "admin";
   const role = session?.user?.role;
   const canAdjustLabBill = isAdmin || role === "frontdesk" || role === "laboratory";
+  const fallbackBackHref = pathname.startsWith("/admin/") ? "/admin/lab-billing" : "/frontdesk/lab-billing";
   const params = useParams<{ patientId: string }>();
   const patientId = params?.patientId ?? "";
 
@@ -121,7 +121,7 @@ export default function FrontdeskLabBillingLabOnlyPage() {
       return;
     }
     router.push(fallbackBackHref);
-  }, [router]);
+  }, [fallbackBackHref, router]);
 
   const hydrateFromStoredBill = useCallback((stored: LabBill | null, cat: CatalogTest[]) => {
     setItems(itemsFromLabBill(stored, cat));
@@ -355,7 +355,7 @@ export default function FrontdeskLabBillingLabOnlyPage() {
     return (
       <PrintLayout
         title="Lab Bill"
-        paper="landscape"
+        paper="portrait"
         actions={
           <div className="flex items-center gap-2">
             <Button variant="default" onClick={() => window.print()}>
@@ -375,7 +375,7 @@ export default function FrontdeskLabBillingLabOnlyPage() {
                 Edit Bill
               </Button>
             )}
-            {canAdjustLabBill && (
+            {isAdmin && (
               <Button variant="destructive" onClick={deleteBill} disabled={submitting}>
                 {submitting ? "Deleting..." : "Delete Bill"}
               </Button>
@@ -727,7 +727,7 @@ export default function FrontdeskLabBillingLabOnlyPage() {
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                     <p className="text-sm font-semibold">Net total: {formatCurrency(grandTotal)}</p>
                     <div className="flex flex-wrap items-center gap-2">
-                      {canAdjustLabBill && bill?._id ? (
+                      {isAdmin && bill?._id ? (
                         <Button type="button" variant="destructive" onClick={deleteBill} disabled={submitting}>
                           {submitting ? "Deleting..." : "Delete Bill"}
                         </Button>

@@ -106,6 +106,7 @@ const groupsByRole: Record<Role, NavGroup[]> = {
     {
       title: "OP & clinical",
       items: [
+        { href: "/admin/visit", label: "New Visit", icon: <ClipboardList className="h-4 w-4" /> },
         { href: "/admin/visits", label: "OP visit", icon: <CalendarDays className="h-4 w-4" /> },
         { href: "/admin/patients", label: "Patients", icon: <Users className="h-4 w-4" /> },
         { href: "/admin/lab-registrations", label: "Lab Registrations", icon: <FlaskConical className="h-4 w-4" /> },
@@ -130,6 +131,9 @@ const groupsByRole: Record<Role, NavGroup[]> = {
     {
       title: "Finance & ops",
       items: [
+        { href: "/admin/procedure-billing", label: "Procedure Billing", icon: <CreditCard className="h-4 w-4" /> },
+        { href: "/admin/pharmacy/billing", label: "Medicine Billing", icon: <ShoppingCart className="h-4 w-4" /> },
+        { href: "/admin/lab-billing", label: "Lab Billing", icon: <FlaskConical className="h-4 w-4" /> },
         { href: "/admin/expenses", label: "Expenses", icon: <Receipt className="h-4 w-4" /> },
         { href: "/admin/payment-methods", label: "Payment methods", icon: <Wallet className="h-4 w-4" /> },
         { href: "/admin/reports", label: "Reports", icon: <BarChart3 className="h-4 w-4" /> },

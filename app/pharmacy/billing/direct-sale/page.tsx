@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { differenceInDays, format } from "date-fns";
 import toast from "react-hot-toast";
@@ -49,7 +49,12 @@ type SavedBill = {
 export default function DirectSalePage() {
   const { data: session } = useSession();
   const router = useRouter();
-  const backHref = "/pharmacy/billing";
+  const pathname = usePathname();
+  const backHref = pathname.startsWith("/admin/pharmacy")
+    ? "/admin/pharmacy/billing"
+    : pathname.startsWith("/frontdesk/medicine-billing")
+      ? "/frontdesk/medicine-billing"
+      : "/pharmacy/billing";
 
   // Step: "form" | "bill"
   const [step, setStep] = useState<"form" | "bill">("form");

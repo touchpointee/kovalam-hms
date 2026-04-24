@@ -300,12 +300,12 @@ export default function VisitMedicineBillingPage() {
         setFrequencies(
           Array.isArray(freqList)
             ? freqList.map((f: { _id?: string; name: string; dosesPerDay?: number | null }) => ({
-                _id: f._id,
-                name: f.name,
-                dosesPerDay: f.dosesPerDay ?? null,
-                value: f.name,
-                label: f.name,
-              }))
+              _id: f._id,
+              name: f.name,
+              dosesPerDay: f.dosesPerDay ?? null,
+              value: f.name,
+              label: f.name,
+            }))
             : []
         );
         if (!visitData?._id || !visitData?.patient?._id) {
@@ -793,202 +793,202 @@ export default function VisitMedicineBillingPage() {
                 <p className="mb-4 text-sm text-muted-foreground">No prescription found for this visit. You can add medicines manually.</p>
               )}
 
-                <div className="mb-4 rounded-xl border border-blue-100 bg-slate-50/60 p-4 shadow-sm">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
-                    <div className="grid min-w-[min(100%,18rem)] flex-1 gap-2 sm:max-w-md">
-                      <Label>Add medicine</Label>
-                      <SearchableCombobox
-                        options={medicineOptions.map((m) => ({ value: m._id, label: m.name }))}
-                        value={selectedMedicineId}
-                        onValueChange={setSelectedMedicineId}
-                        placeholder="Search or select medicine"
-                        searchPlaceholder="Type to filter…"
-                        emptyMessage="No medicines match."
-                      />
-                    </div>
-                    <Button type="button" className="shrink-0" onClick={addMedicineToBill}>
-                      Add medicine
-                    </Button>
-                  </div>
-                </div>
-
-                {items.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No medicines in prescription.</p>
-                ) : (
-                  <>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Medicine</TableHead>
-                          <TableHead>Frequency</TableHead>
-                          <TableHead>Duration</TableHead>
-                          <TableHead>Batch</TableHead>
-                          <TableHead>Expiry</TableHead>
-                          <TableHead>Qty</TableHead>
-                          <TableHead>Price</TableHead>
-                          <TableHead>Line offer</TableHead>
-                          <TableHead>Total</TableHead>
-                          <TableHead>Action</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {items.map((row, idx) => (
-                          <TableRow key={row.id}>
-                            <TableCell>{row.medicineName}</TableCell>
-                            <TableCell>
-                              <SearchableCombobox
-                                options={frequencies}
-                                value={row.frequency}
-                                onValueChange={(value) => updateItemFrequency(idx, value)}
-                                placeholder="Frequency"
-                                searchPlaceholder="Search..."
-                                emptyMessage="No match."
-                                triggerClassName="h-9 min-w-[8rem]"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <div className="relative min-w-[8rem]">
-                                <Input
-                                  type="number"
-                                  min="1"
-                                  value={row.duration.replace(/[^0-9]/g, "")}
-                                  onChange={(e) => updateItemDuration(idx, e.target.value ? `${e.target.value} days` : "")}
-                                  placeholder="0"
-                                  className="pr-12"
-                                />
-                                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                                  days
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              {row.stockStatus === "no_stock" ? (
-                                "-"
-                              ) : (
-                                <SearchableCombobox
-                                  options={row.availableBatches.map((batch) => ({
-                                    value: batch._id,
-                                    label: `${batch.batchNo} · exp ${format(new Date(batch.expiryDate), "dd/MM/yy")} · ${batch.currentStock} u · ${formatCurrency(batch.sellingPrice)}`,
-                                    keywords: `${batch.batchNo} ${batch.mrp} ${batch.sellingPrice}`,
-                                  }))}
-                                  value={row.medicineStockId ?? ""}
-                                  onValueChange={(value) => updateItemBatch(idx, value)}
-                                  placeholder="Batch"
-                                  searchPlaceholder="Search batch…"
-                                  emptyMessage="No batches."
-                                  triggerClassName="h-9 w-full min-w-[11rem] max-w-[240px] justify-between"
-                                  contentClassName="min-w-[18rem]"
-                                />
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {row.stockStatus === "no_stock" ? (
-                                <Badge className="bg-red-600">No Stock</Badge>
-                              ) : (
-                                getExpiryBadge(row.expiryDate)
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {row.stockStatus === "no_stock" ? (
-                                <span className="text-xs text-muted-foreground">-</span>
-                              ) : (
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  max={row.currentStock}
-                                  value={row.quantity}
-                                  onChange={(e) => updateItemQty(idx, parseInt(e.target.value, 10) || 0)}
-                                  className="w-20"
-                                />
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {row.stockStatus === "no_stock" ? "-" : formatCurrency(row.sellingPrice)}
-                            </TableCell>
-                            <TableCell>
-                              {row.stockStatus === "no_stock" ? (
-                                "-"
-                              ) : (
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  step="0.01"
-                                  value={row.lineOffer || ""}
-                                  placeholder="0"
-                                  onChange={(e) =>
-                                    updateLineOffer(idx, parseFloat(e.target.value) || 0)
-                                  }
-                                  className="w-24 tabular-nums"
-                                />
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {row.stockStatus === "no_stock" ? "-" : formatCurrency(row.totalPrice)}
-                            </TableCell>
-                            <TableCell>
-                              <Button variant="ghost" size="icon" onClick={() => removeItem(idx)}>
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                    <div className="mt-4 flex max-w-md flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/80 p-4">
-                      <Label htmlFor="med-bill-offer">Offer on whole bill (amount)</Label>
-                      <Input
-                        id="med-bill-offer"
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={billOffer || ""}
-                        placeholder="0"
-                        onChange={(e) => setBillOffer(Math.max(0, parseFloat(e.target.value) || 0))}
-                        className="max-w-[12rem] tabular-nums"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        After line offers: {formatCurrency(linesNetSum)}
-                        {billOffer > 0 ? ` · Net: ${formatCurrency(grandTotal)}` : ""}
-                      </p>
-                    </div>
-                    <div className="mt-4 flex max-w-md flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/80 p-4">
-                      <Label htmlFor="med-generated-by">Name to show on bill</Label>
-                      <BillingStaffSelect
-                        id="med-generated-by"
-                        label=""
-                        value={generatedByName}
-                        onValueChange={setGeneratedByName}
-                        className="max-w-[18rem]"
-                        triggerClassName="w-full max-w-[18rem]"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Prints as a small “Generated by” line on the bill.
-                      </p>
-                    </div>
-                    <PaymentMethodSelect
-                      className="mt-4 max-w-md"
-                      value={paymentMethodId}
-                      onValueChange={setPaymentMethodId}
-                      required={grandTotal > 0}
-                      onOptionsLoaded={(opts) => {
-                        setPaymentMethodId((id) => id || opts[0]?._id || "");
-                      }}
+              <div className="mb-4 rounded-xl border border-blue-100 bg-slate-50/60 p-4 shadow-sm">
+                <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+                  <div className="grid min-w-[min(100%,18rem)] flex-1 gap-2 sm:max-w-md">
+                    <Label>Add medicine</Label>
+                    <SearchableCombobox
+                      options={medicineOptions.map((m) => ({ value: m._id, label: m.name }))}
+                      value={selectedMedicineId}
+                      onValueChange={setSelectedMedicineId}
+                      placeholder="Search or select medicine"
+                      searchPlaceholder="Type to filter…"
+                      emptyMessage="No medicines match."
                     />
-                    <div className="mt-4 flex items-center justify-between">
-                      <p className="text-sm font-semibold">Net total: {formatCurrency(grandTotal)}</p>
-                      <div className="flex items-center gap-2">
-                        {isAdmin && bill?._id ? (
-                          <Button type="button" variant="destructive" onClick={deleteBill} disabled={submitting}>
-                            {submitting ? "Deleting..." : "Delete Bill"}
-                          </Button>
-                        ) : null}
-                        <Button onClick={generateBill} disabled={submitting || billableItems.length === 0}>
-                          {submitting ? (bill ? "Updating..." : "Generating...") : (bill ? "Update Bill" : "Generate Bill")}
+                  </div>
+                  <Button type="button" className="shrink-0" onClick={addMedicineToBill}>
+                    Add medicine
+                  </Button>
+                </div>
+              </div>
+
+              {items.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No medicines in prescription.</p>
+              ) : (
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Medicine</TableHead>
+                        <TableHead>Frequency</TableHead>
+                        <TableHead>Duration</TableHead>
+                        <TableHead>Batch</TableHead>
+                        <TableHead>Expiry</TableHead>
+                        <TableHead>Qty</TableHead>
+                        <TableHead>Price</TableHead>
+                        <TableHead>Line offer</TableHead>
+                        <TableHead>Total</TableHead>
+                        <TableHead>Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {items.map((row, idx) => (
+                        <TableRow key={row.id}>
+                          <TableCell>{row.medicineName}</TableCell>
+                          <TableCell>
+                            <SearchableCombobox
+                              options={frequencies}
+                              value={row.frequency}
+                              onValueChange={(value) => updateItemFrequency(idx, value)}
+                              placeholder="Frequency"
+                              searchPlaceholder="Search..."
+                              emptyMessage="No match."
+                              triggerClassName="h-9 min-w-[8rem]"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="relative min-w-[8rem]">
+                              <Input
+                                type="number"
+                                min="1"
+                                value={row.duration.replace(/[^0-9]/g, "")}
+                                onChange={(e) => updateItemDuration(idx, e.target.value ? `${e.target.value} days` : "")}
+                                placeholder="0"
+                                className="pr-12"
+                              />
+                              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                                days
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {row.stockStatus === "no_stock" ? (
+                              "-"
+                            ) : (
+                              <SearchableCombobox
+                                options={row.availableBatches.map((batch) => ({
+                                  value: batch._id,
+                                  label: `${batch.batchNo} · exp ${format(new Date(batch.expiryDate), "dd/MM/yy")} · ${batch.currentStock} u · ${formatCurrency(batch.sellingPrice)}`,
+                                  keywords: `${batch.batchNo} ${batch.mrp} ${batch.sellingPrice}`,
+                                }))}
+                                value={row.medicineStockId ?? ""}
+                                onValueChange={(value) => updateItemBatch(idx, value)}
+                                placeholder="Batch"
+                                searchPlaceholder="Search batch…"
+                                emptyMessage="No batches."
+                                triggerClassName="h-9 w-full min-w-[11rem] max-w-[240px] justify-between"
+                                contentClassName="min-w-[18rem]"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {row.stockStatus === "no_stock" ? (
+                              <Badge className="bg-red-600">No Stock</Badge>
+                            ) : (
+                              getExpiryBadge(row.expiryDate)
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {row.stockStatus === "no_stock" ? (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            ) : (
+                              <Input
+                                type="number"
+                                min={1}
+                                max={row.currentStock}
+                                value={row.quantity}
+                                onChange={(e) => updateItemQty(idx, parseInt(e.target.value, 10) || 0)}
+                                className="w-20"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {row.stockStatus === "no_stock" ? "-" : formatCurrency(row.sellingPrice)}
+                          </TableCell>
+                          <TableCell>
+                            {row.stockStatus === "no_stock" ? (
+                              "-"
+                            ) : (
+                              <Input
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                value={row.lineOffer || ""}
+                                placeholder="0"
+                                onChange={(e) =>
+                                  updateLineOffer(idx, parseFloat(e.target.value) || 0)
+                                }
+                                className="w-24 tabular-nums"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {row.stockStatus === "no_stock" ? "-" : formatCurrency(row.totalPrice)}
+                          </TableCell>
+                          <TableCell>
+                            <Button variant="ghost" size="icon" onClick={() => removeItem(idx)}>
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <div className="mt-4 flex max-w-md flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/80 p-4">
+                    <Label htmlFor="med-bill-offer">Offer on whole bill (amount)</Label>
+                    <Input
+                      id="med-bill-offer"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={billOffer || ""}
+                      placeholder="0"
+                      onChange={(e) => setBillOffer(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="max-w-[12rem] tabular-nums"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      After line offers: {formatCurrency(linesNetSum)}
+                      {billOffer > 0 ? ` · Net: ${formatCurrency(grandTotal)}` : ""}
+                    </p>
+                  </div>
+                  <div className="mt-4 flex max-w-md flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/80 p-4">
+                    <Label htmlFor="med-generated-by">Name to show on bill</Label>
+                    <BillingStaffSelect
+                      id="med-generated-by"
+                      label=""
+                      value={generatedByName}
+                      onValueChange={setGeneratedByName}
+                      className="max-w-[18rem]"
+                      triggerClassName="w-full max-w-[18rem]"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Prints as a small “Generated by” line on the bill.
+                    </p>
+                  </div>
+                  <PaymentMethodSelect
+                    className="mt-4 max-w-md"
+                    value={paymentMethodId}
+                    onValueChange={setPaymentMethodId}
+                    required={grandTotal > 0}
+                    onOptionsLoaded={(opts) => {
+                      setPaymentMethodId((id) => id || opts[0]?._id || "");
+                    }}
+                  />
+                  <div className="mt-4 flex items-center justify-between">
+                    <p className="text-sm font-semibold">Net total: {formatCurrency(grandTotal)}</p>
+                    <div className="flex items-center gap-2">
+                      {isAdmin && bill?._id ? (
+                        <Button type="button" variant="destructive" onClick={deleteBill} disabled={submitting}>
+                          {submitting ? "Deleting..." : "Delete Bill"}
                         </Button>
-                      </div>
+                      ) : null}
+                      <Button onClick={generateBill} disabled={submitting || billableItems.length === 0}>
+                        {submitting ? (bill ? "Updating..." : "Generating...") : (bill ? "Update Bill" : "Generate Bill")}
+                      </Button>
                     </div>
-                  </>
-                )}
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </>

@@ -153,8 +153,13 @@ export default function DirectMedicineBillingPage() {
     frequenciesRef.current = frequencies;
   }, [frequencies]);
 
+  const isAdminDirectSale = pathname.startsWith("/admin/pharmacy/billing/direct/");
   const isFrontdeskDirectSale = pathname.startsWith("/frontdesk/medicine-billing/direct/");
-  const backHref = isFrontdeskDirectSale ? "/frontdesk/register" : visitListBackHref;
+  const backHref = isAdminDirectSale
+    ? "/admin/pharmacy/billing"
+    : isFrontdeskDirectSale
+      ? "/frontdesk/register"
+      : visitListBackHref;
   const backLabel = isFrontdeskDirectSale ? "Back to Registration" : "Back to Medicine Billing";
 
   const buildBillItem = useCallback((medicineId: string | undefined, medicineName: string, batches: StockBatch[], source: "prescription" | "manual", options?: { frequency?: string; duration?: string }): BillItem => {

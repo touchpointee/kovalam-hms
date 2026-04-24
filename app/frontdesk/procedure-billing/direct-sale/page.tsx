@@ -59,7 +59,9 @@ type SavedBill = {
 export default function DirectProcedureSalePage() {
   const router = useRouter();
   const pathname = usePathname();
-  const backHref = "/frontdesk/procedure-billing";
+  const backHref = pathname.startsWith("/admin/")
+    ? "/admin/procedure-billing"
+    : "/frontdesk/procedure-billing";
 
   // Step: "form" | "bill"
   const [step, setStep] = useState<"form" | "bill">("form");
@@ -226,7 +228,7 @@ export default function DirectProcedureSalePage() {
     return (
       <PrintLayout
         title="Procedure Bill"
-        paper="landscape"
+        paper="portrait"
         actions={
           <div className="flex items-center gap-2">
             <Button variant="default" onClick={() => window.print()}>Print</Button>
@@ -235,7 +237,7 @@ export default function DirectProcedureSalePage() {
           </div>
         }
       >
-        <div className="space-y-4 print-only">
+        <div className="bill-body-stack flex min-h-full flex-col gap-4 print-only">
           <div className="grid grid-cols-2 gap-8 border-y border-slate-400 py-4 text-[15px]">
             <div className="space-y-2">
               <div className="grid grid-cols-[120px_1fr]"><span>DMC ID</span><span>: {savedBill.patient?.regNo ?? "-"}</span></div>
@@ -296,7 +298,7 @@ export default function DirectProcedureSalePage() {
             const linesNet = savedBill.items.reduce((s, r) => s + Number(r.totalPrice), 0);
             const bo = Number(savedBill.billOffer) || 0;
             return (
-              <div className="pt-8">
+              <div className="bill-summary-block mt-auto pt-6">
                 <div className="ml-auto grid w-[340px] grid-cols-[1fr_120px] gap-y-1 text-[15px]">
                   <div className="border-b border-slate-300 py-1">Subtotal (gross)</div>
                   <div className="border-b border-slate-300 py-1 text-right">{formatCurrency(grossSum)}</div>
@@ -324,6 +326,7 @@ export default function DirectProcedureSalePage() {
                   <div className="py-1 text-right font-semibold">{formatCurrency(savedBill.grandTotal)}</div>
                 </div>
                 <BillSignature
+                  className="bill-signature-compact"
                   staffName={getBillingStaffDisplayName(savedBill.generatedByName) || savedBill.billedBy?.name?.trim()}
                 />
               </div>

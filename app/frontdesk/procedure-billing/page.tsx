@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
@@ -30,7 +31,11 @@ type Visit = {
 
 export default function FrontdeskProcedureBillingPage() {
   const { data: session } = useSession();
-  const canDeleteBill = session?.user?.role === "admin" || session?.user?.role === "frontdesk";
+  const pathname = usePathname();
+  const procedureBillingBase = pathname.startsWith("/admin/")
+    ? "/admin/procedure-billing"
+    : "/frontdesk/procedure-billing";
+  const canDeleteBill = session?.user?.role === "admin";
   const [todayVisits, setTodayVisits] = useState<Visit[]>([]);
   const [procedureOnlyPatients, setProcedureOnlyPatients] = useState<Patient[]>([]);
   const [directBillsByPatient, setDirectBillsByPatient] = useState<
@@ -131,7 +136,7 @@ export default function FrontdeskProcedureBillingPage() {
             </CardDescription>
           </div>
           <Button asChild className="shrink-0">
-            <Link href={`/frontdesk/procedure-billing/direct-sale`}>Start Direct Sale</Link>
+            <Link href={`${procedureBillingBase}/direct-sale`}>Start Direct Sale</Link>
           </Button>
         </CardHeader>
         <CardContent>
@@ -177,7 +182,7 @@ export default function FrontdeskProcedureBillingPage() {
                       <TableCell>
                         <div className="flex flex-wrap gap-2">
                           <Button asChild size="sm" variant="outline">
-                            <Link href={`/frontdesk/procedure-billing/direct/${patient._id}`}>
+                            <Link href={`${procedureBillingBase}/direct/${patient._id}`}>
                               {hasBill ? "Open Bill" : "Create Bill"}
                             </Link>
                           </Button>
@@ -245,7 +250,7 @@ export default function FrontdeskProcedureBillingPage() {
                         {visit.patient?._id ? (
                           <div className="flex flex-wrap gap-2">
                             <Button asChild size="sm" variant="outline">
-                              <Link href={`/frontdesk/procedure-billing/${visit._id}`}>
+                              <Link href={`${procedureBillingBase}/${visit._id}`}>
                                 {hasBill ? "Open Bill" : "Bill This Visit"}
                               </Link>
                             </Button>
